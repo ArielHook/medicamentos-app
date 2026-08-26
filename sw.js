@@ -1,13 +1,13 @@
-const CACHE_NAME = 'medicamentos-v12';
+const CACHE_NAME = 'medicamentos-v13';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/app.js',
-  '/config.js',
-  '/manifest.webmanifest',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  './',
+  './index.html',
+  './style.css',
+  './app.js',
+  './config.js',
+  './manifest.webmanifest',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
 ];
 
 self.addEventListener('install', (event) => {
