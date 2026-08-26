@@ -36,7 +36,7 @@ $('#form-login').addEventListener('submit', async (e) => {
     $('#login-error').textContent = 'Usuario o contraseña incorrectos.';
     return;
   }
-  onLoggedIn(data.user);
+  onLoggedIn(data.user, true);
 });
 
 $('#btn-logout').addEventListener('click', async () => {
@@ -46,17 +46,22 @@ $('#btn-logout').addEventListener('click', async () => {
   $('#view-login').classList.remove('hidden');
 });
 
-async function onLoggedIn(user) {
+async function onLoggedIn(user, isFreshLogin) {
   currentUser = user;
   $('#view-login').classList.add('hidden');
   $('#view-app').classList.remove('hidden');
+  if (isFreshLogin) {
+    // Solo registramos un inicio de sesión real, no cada vez que se
+    // recarga la página con una sesión ya abierta.
+    sb.from('login_history').insert({ user_id: user.id }).then(() => {});
+  }
   await loadPermissionsAndModules();
   await loadAll();
 }
 
 // Restaurar sesión si ya estaba logueado
 sb.auth.getSession().then(({ data }) => {
-  if (data.session) onLoggedIn(data.session.user);
+  if (data.session) onLoggedIn(data.session.user, false);
 });
 
 // ---------- PERMISOS Y MÓDULOS ----------
@@ -1706,6 +1711,28 @@ async function loadAdmin() {
   allProfiles = profiles || [];
   const { data: perms } = await sb.from('module_permissions').select('*');
   renderAdmin(allProfiles, perms || []);
+
+  const { data: history } = await sb.from('login_history').select('*').order('logged_in_at', { ascending: false }).limit(100);
+  renderLoginHistory(history || []);
+}
+
+function renderLoginHistory(history) {
+  const container = $('#login-history-list');
+  container.innerHTML = '';
+  if (history.length === 0) {
+    container.innerHTML = '<p class="hint">Sin accesos registrados todavía.</p>';
+    return;
+  }
+  history.forEach(h => {
+    const row = document.createElement('div');
+    row.className = 'history-row';
+    const when = new Date(h.logged_in_at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    row.innerHTML = `
+      <div><strong>${escapeHtml(profileName(h.user_id))}</strong> inició sesión</div>
+      <div class="when">${when}</div>
+    `;
+    container.appendChild(row);
+  });
 }
 
 function renderAdmin(profiles, perms) {
