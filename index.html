@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Medicamentos</title>
+<meta name="theme-color" content="#1F3864" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- LOGIN -->
+  <section id="view-login" class="view">
+    <div class="card auth-card">
+      <h1>💊 Medicamentos</h1>
+      <p class="subtitle">Iniciá sesión para ver el itinerario y el stock</p>
+      <form id="form-login">
+        <label>Usuario</label>
+        <input type="text" id="login-username" autocomplete="username" required />
+        <label>Contraseña</label>
+        <input type="password" id="login-password" autocomplete="current-password" required />
+        <button type="submit" class="btn-primary">Ingresar</button>
+      </form>
+      <p class="error" id="login-error"></p>
+      <button class="btn-link" id="show-register">Crear una cuenta nueva</button>
+    </div>
+
+    <div class="card auth-card hidden" id="register-card">
+      <h2>Crear cuenta</h2>
+      <form id="form-register">
+        <label>Usuario</label>
+        <input type="text" id="reg-username" required />
+        <label>Contraseña</label>
+        <input type="password" id="reg-password" minlength="6" required />
+        <button type="submit" class="btn-primary">Crear cuenta</button>
+      </form>
+      <p class="error" id="register-error"></p>
+      <button class="btn-link" id="show-login">Volver a iniciar sesión</button>
+    </div>
+  </section>
+
+  <!-- APP PRINCIPAL -->
+  <section id="view-app" class="view hidden">
+    <header class="topbar">
+      <h1 id="module-title">💊 Medicamentos</h1>
+      <div class="menu-wrap">
+        <button id="btn-menu" class="btn-menu-toggle" title="Menú">☰</button>
+        <div id="menu-dropdown" class="menu-dropdown hidden">
+          <div id="menu-modules-list"></div>
+          <div class="menu-divider"></div>
+          <button type="button" id="menu-my-account" class="menu-item">👤 Mi cuenta</button>
+          <button type="button" id="btn-logout" class="menu-item menu-item-danger">🚪 Salir</button>
+        </div>
+      </div>
+    </header>
+
+    <p id="no-access-msg" class="hint hidden" style="padding:20px;text-align:center;">No tenés ningún módulo habilitado todavía. Pedile al administrador que te dé acceso.</p>
+
+    <!-- ===== MÓDULO MEDICAMENTOS ===== -->
+    <div id="module-medicamentos" class="module-view">
+      <div class="patient-bar">
+        <label for="patient-select">Persona:</label>
+        <select id="patient-select"></select>
+        <button id="btn-manage-patients" class="btn-icon-small" title="Administrar personas">⚙️</button>
+      </div>
+
+      <nav class="tabs">
+        <button class="tab active" data-target="tab-itinerario">Itinerario</button>
+        <button class="tab" data-target="tab-stock">Stock</button>
+        <button class="tab" data-target="tab-medicamentos">Medicamentos</button>
+      </nav>
+
+      <div id="alerts-banner" class="alerts-banner hidden"></div>
+
+      <!-- TAB ITINERARIO -->
+      <div id="tab-itinerario" class="tab-content">
+        <div id="itinerario-list"></div>
+      </div>
+
+      <!-- TAB STOCK -->
+      <div id="tab-stock" class="tab-content hidden">
+        <div class="view-toggle">
+          <button id="stock-view-list" class="view-toggle-btn active">📋 Lista</button>
+          <button id="stock-view-calendar" class="view-toggle-btn">📅 Calendario</button>
+        </div>
+        <div id="stock-list"></div>
+        <div id="stock-calendar" class="hidden"></div>
+      </div>
+
+      <!-- TAB MEDICAMENTOS (gestión) -->
+      <div id="tab-medicamentos" class="tab-content hidden">
+        <button id="btn-add-med" class="btn-primary btn-block">+ Agregar medicamento</button>
+        <div id="med-manage-list"></div>
+      </div>
+    </div>
+
+    <!-- ===== MÓDULO MERCADERÍA ===== -->
+    <div id="module-mercaderia" class="module-view hidden">
+      <nav class="tabs">
+        <button class="tab active" data-target="mtab-lista">Lista de compras</button>
+        <button class="tab" data-target="mtab-despensa">Stock despensa</button>
+        <button class="tab" data-target="mtab-historial">Historial</button>
+      </nav>
+
+      <div id="mtab-lista" class="tab-content">
+        <div id="low-stock-banner" class="low-stock-banner hidden">
+          <div class="low-stock-title">⚠️ Con poco stock</div>
+          <div id="low-stock-items"></div>
+        </div>
+
+        <div class="quickadd-section" id="quickadd-section">
+          <div class="category-btns" id="category-quickbtns"></div>
+          <div class="frequent-products" id="frequent-products"></div>
+        </div>
+
+        <form id="form-add-shopping-item" class="inline-form">
+          <input type="text" id="shop-item-name" placeholder="Ej: Leche" required />
+          <input type="number" id="shop-item-qty" placeholder="Cant." min="0" step="0.5" value="1" />
+          <input type="text" id="shop-item-unit" placeholder="unidad" value="u" />
+          <input type="text" id="shop-item-category" placeholder="Categoría (opcional)" list="category-options" />
+          <datalist id="category-options"></datalist>
+          <button type="submit" class="btn-primary">+ Agregar</button>
+        </form>
+        <div id="shopping-list"></div>
+      </div>
+
+      <div id="mtab-despensa" class="tab-content hidden">
+        <p class="hint">Esta es tu despensa: lo que tenés en casa. Se suma sola cuando marcás algo como comprado en la lista, y de acá salen los "productos frecuentes" para agregar rápido.</p>
+        <button id="btn-add-pantry-item" class="btn-secondary btn-block">+ Agregar producto a la despensa</button>
+        <div id="pantry-list"></div>
+      </div>
+
+      <div id="mtab-historial" class="tab-content hidden">
+        <p class="hint">Este es solo un registro para consultar qué se hizo y cuándo. Borrarlo NO cambia tu stock ni tu lista actual — son cosas independientes.</p>
+        <button id="btn-clear-shopping-history" class="btn-danger btn-block hidden">🗑️ Borrar todo el historial</button>
+        <div id="shopping-history"></div>
+      </div>
+    </div>
+
+    <!-- ===== MÓDULO GASTOS ===== -->
+    <div id="module-gastos" class="module-view hidden">
+      <nav class="tabs">
+        <button class="tab active" data-target="gtab-gastos">Gastos</button>
+        <button class="tab" data-target="gtab-balances">Balances</button>
+      </nav>
+
+      <div id="gtab-gastos" class="tab-content">
+        <button id="btn-add-expense" class="btn-primary btn-block">+ Agregar gasto</button>
+        <div id="expenses-list"></div>
+
+        <div id="gastos-admin-section" class="hidden">
+          <h3 class="section-title">Zona de administración</h3>
+          <button id="btn-clear-expenses" class="btn-danger btn-block">🗑️ Borrar todos los gastos</button>
+          <button id="btn-clear-settlements" class="btn-danger btn-block" style="margin-top:8px;">🗑️ Borrar todos los pagos registrados</button>
+        </div>
+      </div>
+
+      <div id="gtab-balances" class="tab-content hidden">
+        <div id="balances-summary"></div>
+        <button id="btn-add-settlement" class="btn-secondary btn-block">Registrar un pago entre usuarios</button>
+        <h3 class="section-title">Pagos registrados</h3>
+        <div id="settlements-list"></div>
+      </div>
+    </div>
+
+    <!-- ===== MÓDULO ADMIN ===== -->
+    <div id="module-admin" class="module-view hidden">
+      <button id="btn-add-user" class="btn-primary btn-block">+ Crear usuario nuevo</button>
+      <div id="users-permissions-list"></div>
+    </div>
+  </section>
+
+</div>
+
+<!-- MODAL personas -->
+<div id="modal-patients" class="modal hidden">
+  <div class="modal-content">
+    <h2>Personas</h2>
+    <div id="patients-list"></div>
+    <form id="form-add-patient">
+      <label>Nueva persona</label>
+      <input type="text" id="new-patient-name" placeholder="Ej: Papá" required />
+      <button type="submit" class="btn-primary btn-block">+ Agregar persona</button>
+    </form>
+    <div class="modal-actions">
+      <div class="spacer"></div>
+      <button type="button" id="btn-close-patients" class="btn-secondary">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- LIGHTBOX foto ampliada -->
+<div id="modal-lightbox" class="modal hidden lightbox-modal">
+  <img id="lightbox-img" src="" alt="" />
+</div>
+
+<!-- MODAL medicamento -->
+<div id="modal-med" class="modal hidden">
+  <div class="modal-content">
+    <h2 id="modal-med-title">Nuevo medicamento</h2>
+    <form id="form-med">
+      <input type="hidden" id="med-id" />
+      <label>Persona</label>
+      <select id="med-patient" required></select>
+      <label>Nombre / marca</label>
+      <input type="text" id="med-name" placeholder="Ej: Montalli 88" required />
+      <label>Droga</label>
+      <input type="text" id="med-drug" placeholder="Ej: Levotiroxina" />
+      <label>Notas</label>
+      <input type="text" id="med-notes" placeholder="Ej: tiroides" />
+
+      <h3>Stock</h3>
+      <label>Cantidad de comprimidos hoy</label>
+      <input type="number" id="med-stock" min="0" step="0.5" value="0" />
+      <p class="hint">A partir de esta fecha se descuenta solo, un día de consumo por cada día que pasa (según el itinerario cargado).</p>
+      <label>Avisar cuando queden menos de (días)</label>
+      <input type="number" id="med-threshold" min="1" step="1" value="7" />
+
+      <h3>Horarios de toma</h3>
+      <div id="schedule-items-editor"></div>
+      <button type="button" id="btn-add-schedule-item" class="btn-secondary btn-block">+ Agregar horario</button>
+
+      <h3>Fotos</h3>
+      <label>Foto de la caja</label>
+      <div class="photo-input-row">
+        <img id="box-photo-preview" class="photo-preview hidden" />
+        <input type="file" id="med-box-photo" accept="image/*" capture="environment" />
+      </div>
+      <input type="hidden" id="med-box-photo-url" />
+
+      <label>Foto de la pastilla</label>
+      <div class="photo-input-row">
+        <img id="pill-photo-preview" class="photo-preview hidden" />
+        <input type="file" id="med-pill-photo" accept="image/*" capture="environment" />
+      </div>
+      <input type="hidden" id="med-pill-photo-url" />
+
+      <div class="modal-actions">
+        <button type="button" id="btn-delete-med" class="btn-danger hidden">Eliminar medicamento</button>
+        <div class="spacer"></div>
+        <button type="button" id="btn-cancel-med" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<template id="tpl-schedule-row">
+  <div class="schedule-row">
+    <input type="text" class="si-label" placeholder="Horario (ej: 22:00, Desayuno)" />
+    <input type="number" class="si-dose" placeholder="Dosis" min="0" step="0.25" />
+    <input type="text" class="si-unit" placeholder="unidad" value="comprimidos" />
+    <button type="button" class="btn-remove-row">✕</button>
+  </div>
+</template>
+
+<!-- MODAL gasto -->
+<div id="modal-expense" class="modal hidden">
+  <div class="modal-content">
+    <h2 id="modal-expense-title">Nuevo gasto</h2>
+    <form id="form-expense">
+      <input type="hidden" id="expense-id" />
+      <label>Descripción</label>
+      <input type="text" id="expense-description" placeholder="Ej: Supermercado" required />
+      <label>Monto</label>
+      <input type="number" id="expense-amount" min="0" step="0.01" required />
+      <label>Fecha</label>
+      <input type="date" id="expense-date" required />
+      <label>Pagado por</label>
+      <p id="expense-paid-by-display" class="hint" style="margin-top:0;font-weight:600;color:var(--navy);"></p>
+      <input type="hidden" id="expense-paid-by" />
+      <label>Categoría (opcional)</label>
+      <input type="text" id="expense-category" placeholder="Ej: Comida, Auto, Casa" />
+      <label>Notas</label>
+      <input type="text" id="expense-notes" />
+      <label>¿Entre quiénes se reparte?</label>
+      <div id="expense-participants"></div>
+      <div class="modal-actions">
+        <button type="button" id="btn-delete-expense" class="btn-danger hidden">Eliminar</button>
+        <div class="spacer"></div>
+        <button type="button" id="btn-cancel-expense" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL registrar pago -->
+<div id="modal-settlement" class="modal hidden">
+  <div class="modal-content">
+    <h2>Registrar pago</h2>
+    <form id="form-settlement">
+      <label>Pagás vos</label>
+      <p id="settlement-from-display" class="hint" style="margin-top:0;font-weight:600;color:var(--navy);"></p>
+      <input type="hidden" id="settlement-from" />
+      <label>¿A quién?</label>
+      <select id="settlement-to" required></select>
+      <label>Monto</label>
+      <input type="number" id="settlement-amount" min="0" step="0.01" required />
+      <label>Fecha</label>
+      <input type="date" id="settlement-date" required />
+      <label>Notas</label>
+      <input type="text" id="settlement-notes" />
+      <div class="modal-actions">
+        <div class="spacer"></div>
+        <button type="button" id="btn-cancel-settlement" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL crear usuario -->
+<div id="modal-user" class="modal hidden">
+  <div class="modal-content">
+    <h2>Crear usuario</h2>
+    <form id="form-new-user">
+      <label>Nombre para mostrar</label>
+      <input type="text" id="new-user-displayname" placeholder="Ej: Tío Carlos" required />
+      <label>Usuario (para ingresar)</label>
+      <input type="text" id="new-user-username" placeholder="ej: carlos" required />
+      <label>Contraseña</label>
+      <input type="password" id="new-user-password" minlength="6" required />
+      <label class="checkbox-label"><input type="checkbox" id="new-user-admin" /> Administrador (acceso total)</label>
+      <p class="error" id="new-user-error"></p>
+      <div class="modal-actions">
+        <div class="spacer"></div>
+        <button type="button" id="btn-cancel-user" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Crear</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL producto de despensa -->
+<div id="modal-pantry-item" class="modal hidden">
+  <div class="modal-content">
+    <h2 id="modal-pantry-title">Nuevo producto</h2>
+    <form id="form-pantry-item">
+      <input type="hidden" id="pantry-id" />
+      <label>Nombre</label>
+      <input type="text" id="pantry-name" placeholder="Ej: Leche" required />
+      <label>Categoría</label>
+      <input type="text" id="pantry-category" list="category-options" placeholder="Ej: Lácteos" />
+      <label id="pantry-qty-label">Cantidad inicial</label>
+      <input type="number" id="pantry-qty" min="0" step="0.5" value="0" />
+      <label>Unidad</label>
+      <input type="text" id="pantry-unit" value="u" />
+      <label>Avisar cuando quede menos de</label>
+      <input type="number" id="pantry-threshold" min="0" step="0.5" value="1" />
+      <div class="modal-actions">
+        <button type="button" id="btn-delete-pantry-item" class="btn-danger hidden">Eliminar</button>
+        <div class="spacer"></div>
+        <button type="button" id="btn-cancel-pantry-item" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL mi cuenta -->
+<div id="modal-account" class="modal hidden">
+  <div class="modal-content">
+    <h2>Mi cuenta</h2>
+    <p class="hint">Usuario: <strong id="account-username"></strong></p>
+
+    <label>Nombre para mostrar</label>
+    <div class="inline-form" style="padding:0;box-shadow:none;">
+      <input type="text" id="account-displayname" style="flex:1 1 auto;" />
+      <button type="button" id="btn-save-displayname" class="btn-secondary">Guardar</button>
+    </div>
+    <p class="error" id="account-name-error"></p>
+
+    <h3 class="section-title">Cambiar contraseña</h3>
+    <label>Nueva contraseña</label>
+    <input type="password" id="account-new-password" minlength="6" placeholder="Mínimo 6 caracteres" />
+    <label>Confirmar contraseña</label>
+    <input type="password" id="account-confirm-password" minlength="6" />
+    <p class="error" id="account-password-error"></p>
+    <button type="button" id="btn-change-password" class="btn-primary btn-block">Cambiar contraseña</button>
+
+    <h3 class="section-title">Sesión</h3>
+    <button type="button" id="btn-logout-everywhere" class="btn-secondary btn-block">Cerrar sesión en todos los dispositivos</button>
+
+    <div class="modal-actions">
+      <div class="spacer"></div>
+      <button type="button" id="btn-close-account" class="btn-secondary">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
