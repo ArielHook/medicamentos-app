@@ -1,4 +1,4 @@
-const CACHE_NAME = 'medicamentos-v14';
+const CACHE_NAME = 'medicamentos-v15';
 const ASSETS = [
   './',
   './index.html',
@@ -29,9 +29,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
-  // Llamadas a Supabase: siempre red (datos frescos)
+  // Llamadas a Supabase (auth, datos, funciones): las dejamos pasar
+  // directo, sin que el service worker las toque para nada.
   if (request.url.includes('supabase.co')) {
-    event.respondWith(fetch(request).catch(() => caches.match(request)));
     return;
   }
   // Shell de la app: siempre intenta la red primero para no quedar

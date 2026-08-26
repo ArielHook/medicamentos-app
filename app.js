@@ -39,35 +39,6 @@ $('#form-login').addEventListener('submit', async (e) => {
   onLoggedIn(data.user);
 });
 
-$('#form-register').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  $('#register-error').textContent = '';
-  const username = $('#reg-username').value;
-  const password = $('#reg-password').value;
-  const { data, error } = await sb.auth.signUp({
-    email: usernameToEmail(username),
-    password,
-  });
-  if (error) {
-    $('#register-error').textContent = 'No se pudo crear la cuenta (¿ya existe ese usuario?).';
-    return;
-  }
-  if (data.user) {
-    onLoggedIn(data.user);
-  } else {
-    $('#register-error').textContent = 'Cuenta creada. Iniciá sesión.';
-    $('#register-card').classList.add('hidden');
-    $('#form-login').classList.remove('hidden');
-  }
-});
-
-$('#show-register').addEventListener('click', () => {
-  $('#register-card').classList.remove('hidden');
-});
-$('#show-login').addEventListener('click', () => {
-  $('#register-card').classList.add('hidden');
-});
-
 $('#btn-logout').addEventListener('click', async () => {
   await sb.auth.signOut();
   currentUser = null;
