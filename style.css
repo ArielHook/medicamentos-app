@@ -133,14 +133,28 @@ input[type=text], input[type=password], input[type=number] {
   border-bottom: 1px solid var(--border);
 }
 .patient-bar label { margin: 0; font-size: 13px; color: var(--navy); white-space: nowrap; }
-.patient-bar select {
+.patient-buttons {
   flex: 1;
-  padding: 9px 10px;
-  border-radius: 8px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+.patient-btn {
+  padding: 8px 16px;
+  border-radius: 20px;
   border: 1px solid var(--border);
-  font-size: 14px;
+  background: #f4f6fa;
   color: var(--text);
-  background: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.patient-btn.active {
+  background: var(--navy);
+  color: white;
+  border-color: var(--navy);
 }
 select {
   padding: 12px;

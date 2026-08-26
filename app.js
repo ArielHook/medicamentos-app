@@ -307,16 +307,21 @@ async function loadAll() {
 }
 
 function renderPatientSelect() {
-  const sel = $('#patient-select');
-  sel.innerHTML = patientsCache.map(p =>
-    `<option value="${p.id}" ${p.id === currentPatientId ? 'selected' : ''}>${escapeHtml(p.name)}</option>`
-  ).join('');
+  const container = $('#patient-buttons');
+  container.innerHTML = '';
+  patientsCache.forEach(p => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'patient-btn' + (p.id === currentPatientId ? ' active' : '');
+    btn.textContent = p.name;
+    btn.addEventListener('click', async () => {
+      if (currentPatientId === p.id) return;
+      currentPatientId = p.id;
+      await loadAll();
+    });
+    container.appendChild(btn);
+  });
 }
-
-$('#patient-select').addEventListener('change', async (e) => {
-  currentPatientId = e.target.value;
-  await loadAll();
-});
 
 // ---------- GESTIÓN DE PERSONAS ----------
 $('#btn-manage-patients').addEventListener('click', () => {
