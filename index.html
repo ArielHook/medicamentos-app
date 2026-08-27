@@ -167,11 +167,20 @@
       </div>
 
       <div id="admin-tab-history" class="tab-content hidden">
-        <div class="inline-form">
-          <select id="history-filter-user"></select>
-          <input type="date" id="history-filter-from" />
-          <input type="date" id="history-filter-to" />
-          <button type="button" id="btn-clear-history-filters" class="btn-secondary">Limpiar</button>
+        <div class="filter-bar">
+          <div class="filter-field">
+            <label>Usuario</label>
+            <select id="history-filter-user"></select>
+          </div>
+          <div class="filter-field">
+            <label>Desde</label>
+            <input type="date" id="history-filter-from" />
+          </div>
+          <div class="filter-field">
+            <label>Hasta</label>
+            <input type="date" id="history-filter-to" />
+          </div>
+          <button type="button" id="btn-clear-history-filters" class="btn-secondary btn-block">Limpiar filtros</button>
         </div>
         <div id="login-history-list"></div>
       </div>
