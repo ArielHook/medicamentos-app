@@ -297,9 +297,11 @@ select {
 }
 .category-btns {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 10px;
   margin-bottom: 10px;
+  padding-bottom: 4px;
 }
 .category-btn {
   padding: 10px 14px;
@@ -313,6 +315,28 @@ select {
   white-space: nowrap;
 }
 .category-btn.active {
+  background: var(--navy);
+  color: white;
+  border-color: var(--navy);
+}
+.category-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 76px;
+  padding: 12px 6px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #f4f6fa;
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.category-tile-icon { font-size: 28px; line-height: 1; }
+.category-tile-label { font-size: 11px; font-weight: 700; text-align: center; }
+.category-tile.active {
   background: var(--navy);
   color: white;
   border-color: var(--navy);
@@ -381,16 +405,34 @@ select {
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 .inline-form input {
-  padding: 9px;
+  padding: 8px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  font-size: 14px;
+  font-size: 13px;
 }
 .inline-form input[type=text]:first-child { flex: 2 1 140px; }
 .inline-form input[type=number] { flex: 0 1 70px; }
 .inline-form input#shop-item-unit { flex: 0 1 70px; }
 .inline-form input#shop-item-category { flex: 1 1 120px; }
 .inline-form button { flex: 0 0 auto; }
+
+/* Formulario de carga manual de mercadería: grilla prolija en vez de
+   que el nombre quede gigante solo en una fila */
+#form-add-shopping-item {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  align-items: stretch;
+}
+#form-add-shopping-item input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  font-size: 13px;
+}
+#form-add-shopping-item #shop-item-name { grid-column: 1 / -1; }
+#form-add-shopping-item #shop-item-category { grid-column: 1 / -1; }
+#form-add-shopping-item button { grid-column: 1 / -1; }
 
 .category-header {
   font-size: 12px;

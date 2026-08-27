@@ -991,6 +991,20 @@ $('#btn-clear-shopping-history').addEventListener('click', async () => {
 // ----- Catálogo / iconos -----
 const DEFAULT_CATEGORIES = ['Almacén', 'Lácteos', 'Carnes', 'Verdulería', 'Limpieza', 'Bebidas', 'Panificados', 'Otros'];
 
+const CATEGORY_ICONS = {
+  'Almacén': '🏪',
+  'Lácteos': '🥛',
+  'Carnes': '🥩',
+  'Verdulería': '🥬',
+  'Limpieza': '🧹',
+  'Bebidas': '🥤',
+  'Panificados': '🍞',
+  'Otros': '📦',
+};
+function iconForCategory(cat) {
+  return CATEGORY_ICONS[cat] || '🏷️';
+}
+
 const EMOJI_KEYWORDS = [
   [/leche|yogur|queso|manteca|crema/i, '🥛'],
   [/carne|pollo|milanesa|asado|bife|cerdo|pescado/i, '🥩'],
@@ -1037,15 +1051,15 @@ function renderQuickAdd() {
   const categories = getKnownCategories();
   const allBtn = document.createElement('button');
   allBtn.type = 'button';
-  allBtn.className = 'category-btn' + (quickAddCategory === null ? ' active' : '');
-  allBtn.textContent = 'Todos';
+  allBtn.className = 'category-tile' + (quickAddCategory === null ? ' active' : '');
+  allBtn.innerHTML = `<span class="category-tile-icon">🔎</span><span class="category-tile-label">Todos</span>`;
   allBtn.addEventListener('click', () => { quickAddCategory = null; renderQuickAdd(); });
   catContainer.appendChild(allBtn);
   categories.forEach(cat => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'category-btn' + (quickAddCategory === cat ? ' active' : '');
-    btn.textContent = cat;
+    btn.className = 'category-tile' + (quickAddCategory === cat ? ' active' : '');
+    btn.innerHTML = `<span class="category-tile-icon">${iconForCategory(cat)}</span><span class="category-tile-label">${escapeHtml(cat)}</span>`;
     btn.addEventListener('click', () => { quickAddCategory = cat; renderQuickAdd(); });
     catContainer.appendChild(btn);
   });
@@ -1089,18 +1103,26 @@ async function quickAddFromPantry(pantryItem) {
 }
 
 // ----- Banner de stock bajo: el corazón de este tipo de apps -----
+let lowStockExpanded = false;
+const LOW_STOCK_COLLAPSE_AT = 4;
+
 function renderLowStockBanner() {
   const banner = $('#low-stock-banner');
   const pendingNames = new Set(shoppingItemsCache.filter(i => i.status === 'pending').map(i => i.name.trim().toLowerCase()));
   const low = pantryCache.filter(p => Number(p.quantity) <= Number(p.low_stock_threshold));
   if (low.length === 0) {
     banner.classList.add('hidden');
+    lowStockExpanded = false;
     return;
   }
   banner.classList.remove('hidden');
   const itemsDiv = $('#low-stock-items');
   itemsDiv.innerHTML = '';
-  low.forEach(p => {
+
+  const showAll = lowStockExpanded || low.length <= LOW_STOCK_COLLAPSE_AT;
+  const visibleItems = showAll ? low : low.slice(0, LOW_STOCK_COLLAPSE_AT);
+
+  visibleItems.forEach(p => {
     const inList = pendingNames.has(p.name.trim().toLowerCase());
     const row = document.createElement('div');
     row.className = 'low-stock-row';
@@ -1113,6 +1135,19 @@ function renderLowStockBanner() {
     }
     itemsDiv.appendChild(row);
   });
+
+  if (low.length > LOW_STOCK_COLLAPSE_AT) {
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'btn-link-small';
+    toggleBtn.style.marginTop = '4px';
+    toggleBtn.textContent = showAll ? 'Ver menos' : `Ver todos (${low.length})`;
+    toggleBtn.addEventListener('click', () => {
+      lowStockExpanded = !lowStockExpanded;
+      renderLowStockBanner();
+    });
+    itemsDiv.appendChild(toggleBtn);
+  }
 }
 
 function renderShoppingList() {
