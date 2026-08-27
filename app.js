@@ -36,23 +36,26 @@ $('#form-login').addEventListener('submit', async (e) => {
     $('#login-error').textContent = 'Usuario o contraseña incorrectos.';
     return;
   }
-  onLoggedIn(data.user, true);
+  onLoggedIn(data.user);
 });
 
 $('#btn-logout').addEventListener('click', async () => {
   await sb.auth.signOut();
   currentUser = null;
+  sessionStorage.removeItem('accessLogged');
   $('#view-app').classList.add('hidden');
   $('#view-login').classList.remove('hidden');
 });
 
-async function onLoggedIn(user, isFreshLogin) {
+async function onLoggedIn(user) {
   currentUser = user;
   $('#view-login').classList.add('hidden');
   $('#view-app').classList.remove('hidden');
-  if (isFreshLogin) {
-    // Solo registramos un inicio de sesión real, no cada vez que se
-    // recarga la página con una sesión ya abierta.
+  // Se registra una vez por apertura de la app (pestaña/sesión del
+  // navegador), aunque la sesión ya estuviera guardada — pero no se
+  // duplica si la página se recarga sola (ej. al actualizar versión).
+  if (!sessionStorage.getItem('accessLogged')) {
+    sessionStorage.setItem('accessLogged', '1');
     sb.from('login_history').insert({ user_id: user.id }).then(() => {});
   }
   await loadPermissionsAndModules();
@@ -61,7 +64,7 @@ async function onLoggedIn(user, isFreshLogin) {
 
 // Restaurar sesión si ya estaba logueado
 sb.auth.getSession().then(({ data }) => {
-  if (data.session) onLoggedIn(data.session.user, false);
+  if (data.session) onLoggedIn(data.session.user);
 });
 
 // ---------- PERMISOS Y MÓDULOS ----------
@@ -1728,7 +1731,7 @@ function renderLoginHistory(history) {
     row.className = 'history-row';
     const when = new Date(h.logged_in_at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     row.innerHTML = `
-      <div><strong>${escapeHtml(profileName(h.user_id))}</strong> inició sesión</div>
+      <div><strong>${escapeHtml(profileName(h.user_id))}</strong> accedió a la app</div>
       <div class="when">${when}</div>
     `;
     container.appendChild(row);
