@@ -1709,24 +1709,46 @@ $('#form-settlement').addEventListener('submit', async (e) => {
 });
 
 // ===================== MÓDULO ADMIN =====================
+let loginHistoryCache = [];
+
 async function loadAdmin() {
   const { data: profiles } = await sb.from('app_profiles').select('*').order('display_name');
   allProfiles = profiles || [];
   const { data: perms } = await sb.from('module_permissions').select('*');
   renderAdmin(allProfiles, perms || []);
 
-  const { data: history } = await sb.from('login_history').select('*').order('logged_in_at', { ascending: false }).limit(100);
-  renderLoginHistory(history || []);
+  const { data: history } = await sb.from('login_history').select('*').order('logged_in_at', { ascending: false }).limit(500);
+  loginHistoryCache = history || [];
+  populateHistoryUserFilter();
+  renderLoginHistory();
 }
 
-function renderLoginHistory(history) {
+function populateHistoryUserFilter() {
+  const sel = $('#history-filter-user');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Todos los usuarios</option>' +
+    allProfiles.map(p => `<option value="${p.user_id}">${escapeHtml(p.display_name)}</option>`).join('');
+  if (current) sel.value = current;
+}
+
+function renderLoginHistory() {
   const container = $('#login-history-list');
   container.innerHTML = '';
-  if (history.length === 0) {
-    container.innerHTML = '<p class="hint">Sin accesos registrados todavía.</p>';
+
+  const userFilter = $('#history-filter-user').value;
+  const fromFilter = $('#history-filter-from').value; // YYYY-MM-DD
+  const toFilter = $('#history-filter-to').value;
+
+  let filtered = loginHistoryCache;
+  if (userFilter) filtered = filtered.filter(h => h.user_id === userFilter);
+  if (fromFilter) filtered = filtered.filter(h => h.logged_in_at.slice(0, 10) >= fromFilter);
+  if (toFilter) filtered = filtered.filter(h => h.logged_in_at.slice(0, 10) <= toFilter);
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<p class="hint">Sin accesos que coincidan con el filtro.</p>';
     return;
   }
-  history.forEach(h => {
+  filtered.forEach(h => {
     const row = document.createElement('div');
     row.className = 'history-row';
     const when = new Date(h.logged_in_at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -1737,6 +1759,16 @@ function renderLoginHistory(history) {
     container.appendChild(row);
   });
 }
+
+$('#history-filter-user').addEventListener('change', renderLoginHistory);
+$('#history-filter-from').addEventListener('change', renderLoginHistory);
+$('#history-filter-to').addEventListener('change', renderLoginHistory);
+$('#btn-clear-history-filters').addEventListener('click', () => {
+  $('#history-filter-user').value = '';
+  $('#history-filter-from').value = '';
+  $('#history-filter-to').value = '';
+  renderLoginHistory();
+});
 
 function renderAdmin(profiles, perms) {
   const container = $('#users-permissions-list');

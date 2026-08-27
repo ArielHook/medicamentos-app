@@ -156,11 +156,25 @@
 
     <!-- ===== MÓDULO ADMIN ===== -->
     <div id="module-admin" class="module-view hidden">
-      <button id="btn-add-user" class="btn-primary btn-block">+ Crear usuario nuevo</button>
-      <div id="users-permissions-list"></div>
+      <nav class="tabs">
+        <button class="tab active" data-target="admin-tab-users">Usuarios y permisos</button>
+        <button class="tab" data-target="admin-tab-history">Historial de accesos</button>
+      </nav>
 
-      <h3 class="section-title">Historial de accesos</h3>
-      <div id="login-history-list"></div>
+      <div id="admin-tab-users" class="tab-content">
+        <button id="btn-add-user" class="btn-primary btn-block">+ Crear usuario nuevo</button>
+        <div id="users-permissions-list"></div>
+      </div>
+
+      <div id="admin-tab-history" class="tab-content hidden">
+        <div class="inline-form">
+          <select id="history-filter-user"></select>
+          <input type="date" id="history-filter-from" />
+          <input type="date" id="history-filter-to" />
+          <button type="button" id="btn-clear-history-filters" class="btn-secondary">Limpiar</button>
+        </div>
+        <div id="login-history-list"></div>
+      </div>
     </div>
   </section>
 
