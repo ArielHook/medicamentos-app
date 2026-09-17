@@ -1897,20 +1897,41 @@ $('#form-new-user').addEventListener('submit', async (e) => {
   }
 });
 
-// ---------- PWA: registrar service worker ----------
+// ---------- PWA: registrar service worker + detectar actualizaciones ----------
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').then((reg) => {
-      // Si ya había un service worker viejo controlando la página,
-      // forzar que el nuevo tome control apenas esté listo.
-      reg.addEventListener('updatefound', () => {
-        const newWorker = reg.installing;
+      const handleNewWorker = (newWorker) => {
         newWorker.addEventListener('statechange', () => {
           if (newWorker.state === 'activated') {
-            window.location.reload();
+            showUpdateBanner();
           }
         });
+      };
+      // Si ya había un service worker viejo controlando la página, o se
+      // detecta uno nuevo mientras la app está abierta.
+      if (reg.waiting) handleNewWorker(reg.waiting);
+      reg.addEventListener('updatefound', () => {
+        if (reg.installing) handleNewWorker(reg.installing);
+      });
+
+      // La app puede quedar abierta mucho tiempo sin recargarse (por
+      // eso a veces no se notaba una actualización). Revisamos cada
+      // 3 minutos si hay una versión nueva en el servidor.
+      setInterval(() => reg.update().catch(() => {}), 3 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
       });
     }).catch(() => {});
   });
+}
+
+function showUpdateBanner() {
+  if ($('#update-banner')) return; // ya se está mostrando
+  const banner = document.createElement('div');
+  banner.id = 'update-banner';
+  banner.className = 'update-banner';
+  banner.innerHTML = `🔄 Hay una versión nueva. Actualizando...`;
+  document.body.appendChild(banner);
+  setTimeout(() => window.location.reload(), 1800);
 }

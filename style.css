@@ -756,6 +756,26 @@ select {
 }
 .tab.active { color: var(--navy); border-bottom-color: var(--navy); }
 
+.update-banner {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--navy);
+  color: white;
+  padding: 12px 20px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+  z-index: 100;
+  animation: update-banner-in 0.25s ease-out;
+}
+@keyframes update-banner-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
 .alerts-banner {
   background: var(--warn-bg);
   color: var(--danger);
