@@ -133,6 +133,7 @@
       <nav class="tabs">
         <button class="tab active" data-target="gtab-gastos">Gastos</button>
         <button class="tab" data-target="gtab-balances">Balances</button>
+        <button class="tab" data-target="gtab-fijos">Gastos fijos</button>
         <button class="tab" data-target="gtab-categorias">Categorías</button>
         <button class="tab" data-target="gtab-cuentas">Cuentas</button>
       </nav>
@@ -197,6 +198,12 @@
         <p class="hint">Cuentas de pago que no son de ninguno de ustedes 3 (ej: débito de Papá, efectivo de Mamá). Un gasto pagado con una de estas cuentas queda registrado, pero no se reparte entre hermanos ni afecta el balance.</p>
         <button id="btn-add-account" class="btn-primary btn-block">+ Agregar cuenta</button>
         <div id="accounts-list"></div>
+      </div>
+
+      <div id="gtab-fijos" class="tab-content hidden">
+        <p class="hint">Gastos que se repiten seguido (alquiler, luz, gas, internet...). Cargalos acá una vez; después, al agregar un gasto nuevo, los vas a poder elegir de una lista en vez de tipear todo de nuevo.</p>
+        <button id="btn-add-template" class="btn-primary btn-block">+ Agregar gasto fijo</button>
+        <div id="templates-list"></div>
       </div>
     </div>
 
@@ -323,6 +330,12 @@
     <h2 id="modal-expense-title">Nuevo gasto</h2>
     <form id="form-expense">
       <input type="hidden" id="expense-id" />
+
+      <div id="expense-templates-picker" class="hidden">
+        <label>¿Es uno de tus gastos fijos?</label>
+        <div id="expense-templates-chips" class="frequent-products"></div>
+      </div>
+
       <label>Descripción</label>
       <input type="text" id="expense-description" placeholder="Ej: Supermercado" required />
       <label>Monto</label>
@@ -331,7 +344,7 @@
       <input type="date" id="expense-date" required />
       <label>Categoría</label>
       <select id="expense-category"></select>
-      <label class="checkbox-label"><input type="checkbox" id="expense-is-fixed" /> Es un gasto fijo (recurrente: luz, gas, alquiler, internet, etc.)</label>
+      <input type="hidden" id="expense-is-fixed" />
 
       <label>¿Cómo se pagó?</label>
       <div class="segmented" id="expense-type-toggle">
@@ -384,6 +397,44 @@
   </div>
 </div>
 
+<!-- MODAL gasto fijo (plantilla) -->
+<div id="modal-template" class="modal hidden">
+  <div class="modal-content">
+    <h2 id="modal-template-title">Nuevo gasto fijo</h2>
+    <form id="form-template">
+      <input type="hidden" id="template-id" />
+      <label>Nombre</label>
+      <input type="text" id="template-name" placeholder="Ej: Alquiler, Luz, Internet..." required />
+      <label>Monto habitual (opcional — si varía cada mes, dejalo vacío)</label>
+      <input type="number" id="template-amount" min="0" step="0.01" />
+      <label>Categoría</label>
+      <select id="template-category"></select>
+
+      <label>¿Cómo se paga normalmente?</label>
+      <div class="segmented" id="template-type-toggle">
+        <button type="button" class="segmented-btn active" data-type="compartido">Compartido entre hermanos</button>
+        <button type="button" class="segmented-btn" data-type="cuenta_externa">Cuenta de Papá/Mamá</button>
+      </div>
+
+      <div id="template-compartido-fields">
+        <label>¿Entre quiénes se reparte normalmente?</label>
+        <div id="template-participants"></div>
+      </div>
+
+      <div id="template-cuenta-fields" class="hidden">
+        <label>Cuenta usada</label>
+        <select id="template-account"></select>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" id="btn-delete-template" class="btn-danger hidden">Eliminar</button>
+        <div class="spacer"></div>
+        <button type="button" id="btn-cancel-template" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <!-- MODAL registrar pago -->
 <div id="modal-settlement" class="modal hidden">

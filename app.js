@@ -1432,20 +1432,23 @@ let expenseSplitsCache = [];
 let settlementsCache = [];
 let categoriesCache = [];
 let accountsCache = [];
+let templatesCache = [];
 
 async function loadGastos() {
-  const [{ data: exp }, { data: splits }, { data: sett }, { data: cats }, { data: accs }] = await Promise.all([
+  const [{ data: exp }, { data: splits }, { data: sett }, { data: cats }, { data: accs }, { data: tpls }] = await Promise.all([
     sb.from('expenses').select('*').order('expense_date', { ascending: false }),
     sb.from('expense_splits').select('*'),
     sb.from('settlements').select('*').order('settled_date', { ascending: false }),
     sb.from('expense_categories').select('*').order('name'),
     sb.from('payment_accounts').select('*').order('owner_name'),
+    sb.from('fixed_expense_templates').select('*').eq('active', true).order('name'),
   ]);
   expensesCache = exp || [];
   expenseSplitsCache = splits || [];
   settlementsCache = sett || [];
   categoriesCache = cats || [];
   accountsCache = accs || [];
+  templatesCache = tpls || [];
 
   populateExpenseFilters();
   renderExpenses();
@@ -1454,11 +1457,13 @@ async function loadGastos() {
   renderSettlements();
   renderCategories();
   renderAccounts();
+  renderTemplates();
 
   const writeOk = canWrite('gastos');
   $('#btn-add-expense').classList.toggle('hidden', !writeOk);
   $('#btn-add-settlement').classList.toggle('hidden', !writeOk);
   $('#btn-add-account').classList.toggle('hidden', !writeOk);
+  $('#btn-add-template').classList.toggle('hidden', !writeOk);
   $('#form-add-category').classList.toggle('hidden', !writeOk);
   $('#gastos-admin-section').classList.toggle('hidden', !myProfile?.is_admin);
 }
@@ -1858,6 +1863,144 @@ $('#form-payment-account').addEventListener('submit', async (e) => {
   await loadGastos();
 });
 
+// ----- Gastos fijos (plantillas reutilizables) -----
+function templateAccountLabel(t) {
+  const acc = accountsCache.find(a => a.id === t.payment_account_id);
+  return acc ? accountLabel(acc) : '—';
+}
+
+function renderTemplates() {
+  const container = $('#templates-list');
+  container.innerHTML = '';
+  const writeOk = canWrite('gastos');
+  if (templatesCache.length === 0) {
+    container.innerHTML = '<p class="hint">Todavía no cargaste ningún gasto fijo.</p>';
+    return;
+  }
+  templatesCache.forEach(t => {
+    const cat = categoriesCache.find(c => c.id === t.category_id);
+    const row = document.createElement('div');
+    row.className = 'category-row';
+    const detail = t.expense_type === 'cuenta_externa'
+      ? `💳 ${templateAccountLabel(t)}`
+      : `Entre: ${(t.default_participants || []).map(uid => profileName(uid)).join(', ') || '—'}`;
+    row.innerHTML = `
+      <div>
+        <div class="label">📌 ${escapeHtml(t.name)}${t.default_amount ? ` — $${Number(t.default_amount).toLocaleString('es-AR')}` : ''}</div>
+        <div class="shop-meta">${cat ? escapeHtml(cat.name) + ' · ' : ''}${detail}</div>
+      </div>
+      ${writeOk ? `
+      <span style="display:flex;gap:4px;">
+        <button type="button" class="btn-icon-xs" data-edit-tpl="${t.id}" title="Editar">✎</button>
+        <button type="button" class="btn-icon-xs danger" data-del-tpl="${t.id}" title="Eliminar">✕</button>
+      </span>` : ''}
+    `;
+    if (writeOk) {
+      row.querySelector('[data-edit-tpl]').addEventListener('click', () => openTemplateModal(t.id));
+      row.querySelector('[data-del-tpl]').addEventListener('click', async () => {
+        if (!confirm(`¿Eliminar el gasto fijo "${t.name}"?`)) return;
+        await sb.from('fixed_expense_templates').delete().eq('id', t.id);
+        await loadGastos();
+      });
+    }
+    container.appendChild(row);
+  });
+}
+
+$('#btn-add-template').addEventListener('click', () => openTemplateModal(null));
+$('#btn-cancel-template').addEventListener('click', () => $('#modal-template').classList.add('hidden'));
+
+$('#template-type-toggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('.segmented-btn');
+  if (!btn) return;
+  $$('#template-type-toggle .segmented-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const isExterna = btn.dataset.type === 'cuenta_externa';
+  $('#template-compartido-fields').classList.toggle('hidden', isExterna);
+  $('#template-cuenta-fields').classList.toggle('hidden', !isExterna);
+});
+
+function openTemplateModal(templateId) {
+  $('#form-template').reset();
+  $('#btn-delete-template').classList.add('hidden');
+
+  $('#template-category').innerHTML = '<option value="">Sin categoría</option>' +
+    categoriesCache.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  $('#template-account').innerHTML = accountsCache.length
+    ? accountsCache.map(a => `<option value="${a.id}">${escapeHtml(accountLabel(a))}</option>`).join('')
+    : '<option value="">No hay cuentas cargadas — agregá una en la pestaña "Cuentas"</option>';
+
+  const eligible = usersWithModuleAccess('gastos');
+  const t = templateId ? templatesCache.find(x => x.id === templateId) : null;
+  const defaultParticipants = t ? (t.default_participants || []) : eligible.map(p => p.user_id);
+  const participantsDiv = $('#template-participants');
+  participantsDiv.innerHTML = '';
+  eligible.forEach(p => {
+    const chip = document.createElement('span');
+    chip.className = 'participant-chip' + (defaultParticipants.includes(p.user_id) ? ' selected' : '');
+    chip.textContent = p.display_name;
+    chip.dataset.userId = p.user_id;
+    chip.addEventListener('click', () => chip.classList.toggle('selected'));
+    participantsDiv.appendChild(chip);
+  });
+
+  $$('#template-type-toggle .segmented-btn').forEach(b => b.classList.toggle('active', b.dataset.type === (t?.expense_type || 'compartido')));
+  $('#template-compartido-fields').classList.toggle('hidden', t?.expense_type === 'cuenta_externa');
+  $('#template-cuenta-fields').classList.toggle('hidden', t?.expense_type !== 'cuenta_externa');
+
+  if (t) {
+    $('#modal-template-title').textContent = 'Editar gasto fijo';
+    $('#template-id').value = t.id;
+    $('#template-name').value = t.name;
+    $('#template-amount').value = t.default_amount || '';
+    $('#template-category').value = t.category_id || '';
+    if (t.expense_type === 'cuenta_externa') $('#template-account').value = t.payment_account_id || '';
+    $('#btn-delete-template').classList.remove('hidden');
+  } else {
+    $('#modal-template-title').textContent = 'Nuevo gasto fijo';
+    $('#template-id').value = '';
+  }
+  $('#modal-template').classList.remove('hidden');
+}
+
+$('#form-template').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = $('#template-id').value || null;
+  const name = $('#template-name').value.trim();
+  const amount = $('#template-amount').value ? Number($('#template-amount').value) : null;
+  const categoryId = $('#template-category').value || null;
+  const expenseType = $('#template-type-toggle .segmented-btn.active')?.dataset.type || 'compartido';
+  if (!name) return;
+
+  const payload = { name, default_amount: amount, category_id: categoryId, expense_type: expenseType };
+  if (expenseType === 'cuenta_externa') {
+    const accountId = $('#template-account').value;
+    if (!accountId) { alert('Elegí una cuenta.'); return; }
+    payload.payment_account_id = accountId;
+    payload.default_participants = [];
+  } else {
+    const participants = [...$('#template-participants').querySelectorAll('.participant-chip.selected')].map(c => c.dataset.userId);
+    payload.payment_account_id = null;
+    payload.default_participants = participants;
+  }
+
+  const { error } = id
+    ? await sb.from('fixed_expense_templates').update(payload).eq('id', id)
+    : await sb.from('fixed_expense_templates').insert(payload);
+  if (error) { alert('Error: ' + error.message); return; }
+  $('#modal-template').classList.add('hidden');
+  await loadGastos();
+});
+
+$('#btn-delete-template').addEventListener('click', async () => {
+  const id = $('#template-id').value;
+  if (!id) return;
+  if (!confirm('¿Eliminar este gasto fijo?')) return;
+  await sb.from('fixed_expense_templates').delete().eq('id', id);
+  $('#modal-template').classList.add('hidden');
+  await loadGastos();
+});
+
 // ----- Modal gasto -----
 $('#btn-add-expense').addEventListener('click', () => openExpenseModal(null));
 $('#btn-cancel-expense').addEventListener('click', () => $('#modal-expense').classList.add('hidden'));
@@ -1876,10 +2019,46 @@ function currentExpenseType() {
   return $('#expense-type-toggle .segmented-btn.active')?.dataset.type || 'compartido';
 }
 
+function applyTemplateToExpenseForm(t) {
+  $('#expense-description').value = t.name;
+  if (t.default_amount) $('#expense-amount').value = t.default_amount;
+  $('#expense-category').value = t.category_id || '';
+  $('#expense-is-fixed').value = '1';
+
+  $$('#expense-type-toggle .segmented-btn').forEach(b => b.classList.toggle('active', b.dataset.type === t.expense_type));
+  const isExterna = t.expense_type === 'cuenta_externa';
+  $('#expense-compartido-fields').classList.toggle('hidden', isExterna);
+  $('#expense-cuenta-fields').classList.toggle('hidden', !isExterna);
+
+  if (isExterna) {
+    $('#expense-account').value = t.payment_account_id || '';
+  } else {
+    const wanted = new Set(t.default_participants || []);
+    $$('#expense-participants .participant-chip').forEach(chip => {
+      chip.classList.toggle('selected', wanted.has(chip.dataset.userId));
+    });
+  }
+  $('#expense-amount').focus();
+}
+
 function openExpenseModal(expenseId) {
   $('#form-expense').reset();
+  $('#expense-is-fixed').value = '';
   $('#btn-delete-expense').classList.add('hidden');
   $('#expense-date').value = todayStr();
+
+  // Selector rápido de gastos fijos (solo al crear uno nuevo)
+  $('#expense-templates-picker').classList.toggle('hidden', !!expenseId || templatesCache.length === 0);
+  const chipsDiv = $('#expense-templates-chips');
+  chipsDiv.innerHTML = '';
+  templatesCache.forEach(t => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'product-chip';
+    chip.innerHTML = `<span class="emoji">📌</span> ${escapeHtml(t.name)}`;
+    chip.addEventListener('click', () => applyTemplateToExpenseForm(t));
+    chipsDiv.appendChild(chip);
+  });
 
   // Categoría
   $('#expense-category').innerHTML = '<option value="">Sin categoría</option>' +
@@ -1929,7 +2108,7 @@ function openExpenseModal(expenseId) {
     $('#expense-date').value = exp.expense_date;
     $('#expense-category').value = exp.category_id || '';
     $('#expense-notes').value = exp.notes || '';
-    $('#expense-is-fixed').checked = !!exp.is_fixed;
+    $('#expense-is-fixed').value = exp.is_fixed ? '1' : '';
     $('#btn-delete-expense').classList.remove('hidden');
 
     if (exp.expense_type === 'cuenta_externa') {
@@ -1960,7 +2139,7 @@ $('#form-expense').addEventListener('submit', async (e) => {
   const expenseDate = $('#expense-date').value;
   const categoryId = $('#expense-category').value || null;
   const notes = $('#expense-notes').value.trim() || null;
-  const isFixed = $('#expense-is-fixed').checked;
+  const isFixed = $('#expense-is-fixed').value === '1';
   const expenseType = currentExpenseType();
 
   try {
