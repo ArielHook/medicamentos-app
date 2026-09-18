@@ -177,13 +177,14 @@
       <div id="gtab-balances" class="tab-content hidden">
         <p class="hint">Solo incluye gastos "Compartidos entre hermanos". Los pagados con cuenta de Papá/Mamá no entran acá.</p>
         <div id="balances-summary"></div>
-        <button id="btn-add-settlement" class="btn-secondary btn-block">Registrar un pago entre usuarios</button>
-        <h3 class="section-title">Pagos registrados</h3>
-        <div id="settlements-list"></div>
 
         <h3 class="section-title">Gastos de Papá / Mamá</h3>
         <p class="hint">No se reparten ni afectan el balance de arriba — es solo control de cuánto se gastó de cada cuenta externa.</p>
         <div id="external-balances" class="external-balances-grid"></div>
+
+        <button id="btn-add-settlement" class="btn-secondary btn-block">Registrar un pago entre usuarios</button>
+        <h3 class="section-title">Pagos registrados</h3>
+        <div id="settlements-list"></div>
       </div>
 
       <div id="gtab-categorias" class="tab-content hidden">
@@ -382,13 +383,15 @@
 <!-- MODAL cuenta de pago -->
 <div id="modal-payment-account" class="modal hidden">
   <div class="modal-content">
-    <h2>Nueva cuenta</h2>
+    <h2 id="modal-payment-account-title">Nueva cuenta</h2>
     <form id="form-payment-account">
+      <input type="hidden" id="payment-account-id" />
       <label>¿De quién es? (ej: Papá, Mamá)</label>
       <input type="text" id="payment-account-owner-name" required />
       <label>Nombre de la cuenta (ej: Débito Banco Galicia, Efectivo)</label>
       <input type="text" id="payment-account-label" required />
       <div class="modal-actions">
+        <button type="button" id="btn-delete-payment-account" class="btn-danger hidden">Eliminar</button>
         <div class="spacer"></div>
         <button type="button" id="btn-cancel-payment-account" class="btn-secondary">Cancelar</button>
         <button type="submit" class="btn-primary">Guardar</button>

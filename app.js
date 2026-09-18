@@ -1833,10 +1833,15 @@ function renderAccounts() {
         <div class="label">${escapeHtml(a.label)}</div>
         <div class="owner">${escapeHtml(a.owner_name)}</div>
       </div>
-      ${writeOk ? `<button type="button" class="btn-x" data-id="${a.id}">✕</button>` : ''}
+      ${writeOk ? `
+      <span style="display:flex;gap:4px;">
+        <button type="button" class="btn-icon-xs" data-edit-acc="${a.id}" title="Editar">✎</button>
+        <button type="button" class="btn-icon-xs danger" data-del-acc="${a.id}" title="Eliminar">✕</button>
+      </span>` : ''}
     `;
     if (writeOk) {
-      row.querySelector('.btn-x').addEventListener('click', async () => {
+      row.querySelector('[data-edit-acc]').addEventListener('click', () => openPaymentAccountModal(a.id));
+      row.querySelector('[data-del-acc]').addEventListener('click', async () => {
         if (!confirm(`¿Eliminar la cuenta "${a.label}" de ${a.owner_name}?`)) return;
         await sb.from('payment_accounts').delete().eq('id', a.id);
         await loadGastos();
@@ -1846,19 +1851,45 @@ function renderAccounts() {
   });
 }
 
-$('#btn-add-account').addEventListener('click', () => {
+function openPaymentAccountModal(accountId) {
   $('#form-payment-account').reset();
+  $('#payment-account-id').value = '';
+  $('#btn-delete-payment-account').classList.add('hidden');
+  if (accountId) {
+    const a = accountsCache.find(x => x.id === accountId);
+    $('#modal-payment-account-title').textContent = 'Editar cuenta';
+    $('#payment-account-id').value = a.id;
+    $('#payment-account-owner-name').value = a.owner_name;
+    $('#payment-account-label').value = a.label;
+    $('#btn-delete-payment-account').classList.remove('hidden');
+  } else {
+    $('#modal-payment-account-title').textContent = 'Nueva cuenta';
+  }
   $('#modal-payment-account').classList.remove('hidden');
-});
+}
+
+$('#btn-add-account').addEventListener('click', () => openPaymentAccountModal(null));
 $('#btn-cancel-payment-account').addEventListener('click', () => $('#modal-payment-account').classList.add('hidden'));
 
 $('#form-payment-account').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const id = $('#payment-account-id').value || null;
   const ownerName = $('#payment-account-owner-name').value.trim();
   const label = $('#payment-account-label').value.trim();
   if (!ownerName || !label) return;
-  const { error } = await sb.from('payment_accounts').insert({ owner_name: ownerName, label });
+  const { error } = id
+    ? await sb.from('payment_accounts').update({ owner_name: ownerName, label }).eq('id', id)
+    : await sb.from('payment_accounts').insert({ owner_name: ownerName, label });
   if (error) { alert('Error: ' + error.message); return; }
+  $('#modal-payment-account').classList.add('hidden');
+  await loadGastos();
+});
+
+$('#btn-delete-payment-account').addEventListener('click', async () => {
+  const id = $('#payment-account-id').value;
+  if (!id) return;
+  if (!confirm('¿Eliminar esta cuenta?')) return;
+  await sb.from('payment_accounts').delete().eq('id', id);
   $('#modal-payment-account').classList.add('hidden');
   await loadGastos();
 });
