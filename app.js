@@ -1,5 +1,7 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
+const APP_VERSION = 'v28';
+
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
     fetch: (url, options = {}) => fetch(url, { ...options, cache: 'no-store' }),
@@ -191,6 +193,7 @@ $('#menu-my-account').addEventListener('click', () => {
   $('#account-new-password').value = '';
   $('#account-confirm-password').value = '';
   $('#account-password-error').textContent = '';
+  $('#app-version-label').textContent = `Versión ${APP_VERSION}`;
   $('#modal-account').classList.remove('hidden');
 });
 $('#btn-close-account').addEventListener('click', () => $('#modal-account').classList.add('hidden'));
