@@ -133,10 +133,37 @@
       <nav class="tabs">
         <button class="tab active" data-target="gtab-gastos">Gastos</button>
         <button class="tab" data-target="gtab-balances">Balances</button>
+        <button class="tab" data-target="gtab-categorias">Categorías</button>
+        <button class="tab" data-target="gtab-cuentas">Cuentas</button>
       </nav>
 
       <div id="gtab-gastos" class="tab-content">
         <button id="btn-add-expense" class="btn-primary btn-block">+ Agregar gasto</button>
+
+        <div class="filter-bar">
+          <div class="filter-field">
+            <label>Usuario</label>
+            <select id="expense-filter-user"></select>
+          </div>
+          <div class="filter-field">
+            <label>Cuenta</label>
+            <select id="expense-filter-account"></select>
+          </div>
+          <div class="filter-field">
+            <label>Categoría</label>
+            <select id="expense-filter-category"></select>
+          </div>
+          <div class="filter-field">
+            <label>Desde</label>
+            <input type="date" id="expense-filter-from" />
+          </div>
+          <div class="filter-field">
+            <label>Hasta</label>
+            <input type="date" id="expense-filter-to" />
+          </div>
+          <button type="button" id="btn-clear-expense-filters" class="btn-secondary btn-block">Limpiar filtros</button>
+        </div>
+
         <div id="expenses-list"></div>
 
         <div id="gastos-admin-section" class="hidden">
@@ -147,10 +174,25 @@
       </div>
 
       <div id="gtab-balances" class="tab-content hidden">
+        <p class="hint">Solo incluye gastos "Compartidos entre hermanos". Los pagados con cuenta de Papá/Mamá no entran acá.</p>
         <div id="balances-summary"></div>
         <button id="btn-add-settlement" class="btn-secondary btn-block">Registrar un pago entre usuarios</button>
         <h3 class="section-title">Pagos registrados</h3>
         <div id="settlements-list"></div>
+      </div>
+
+      <div id="gtab-categorias" class="tab-content hidden">
+        <form id="form-add-category" class="inline-form">
+          <input type="text" id="new-category-name" placeholder="Ej: Luz, Gas, Alquiler..." required />
+          <button type="submit" class="btn-primary">+ Agregar</button>
+        </form>
+        <div id="categories-list"></div>
+      </div>
+
+      <div id="gtab-cuentas" class="tab-content hidden">
+        <p class="hint">Cuentas de pago que no son de ninguno de ustedes 3 (ej: débito de Papá, efectivo de Mamá). Un gasto pagado con una de estas cuentas queda registrado, pero no se reparte entre hermanos ni afecta el balance.</p>
+        <button id="btn-add-account" class="btn-primary btn-block">+ Agregar cuenta</button>
+        <div id="accounts-list"></div>
       </div>
     </div>
 
@@ -283,15 +325,32 @@
       <input type="number" id="expense-amount" min="0" step="0.01" required />
       <label>Fecha</label>
       <input type="date" id="expense-date" required />
-      <label>Pagado por</label>
-      <p id="expense-paid-by-display" class="hint" style="margin-top:0;font-weight:600;color:var(--navy);"></p>
-      <input type="hidden" id="expense-paid-by" />
-      <label>Categoría (opcional)</label>
-      <input type="text" id="expense-category" placeholder="Ej: Comida, Auto, Casa" />
+      <label>Categoría</label>
+      <select id="expense-category"></select>
+
+      <label>¿Cómo se pagó?</label>
+      <div class="segmented" id="expense-type-toggle">
+        <button type="button" class="segmented-btn active" data-type="compartido">Compartido entre hermanos</button>
+        <button type="button" class="segmented-btn" data-type="cuenta_externa">Cuenta de Papá/Mamá</button>
+      </div>
+
+      <div id="expense-compartido-fields">
+        <label>Pagado por</label>
+        <p id="expense-paid-by-display" class="hint" style="margin-top:0;font-weight:600;color:var(--navy);"></p>
+        <select id="expense-paid-by-select" class="hidden"></select>
+        <input type="hidden" id="expense-paid-by" />
+        <label>¿Entre quiénes se reparte?</label>
+        <div id="expense-participants"></div>
+      </div>
+
+      <div id="expense-cuenta-fields" class="hidden">
+        <label>Cuenta usada</label>
+        <select id="expense-account"></select>
+        <p class="hint">Este gasto no se reparte entre hermanos ni afecta el balance — solo queda registrado para llevar el control de esa cuenta.</p>
+      </div>
+
       <label>Notas</label>
       <input type="text" id="expense-notes" />
-      <label>¿Entre quiénes se reparte?</label>
-      <div id="expense-participants"></div>
       <div class="modal-actions">
         <button type="button" id="btn-delete-expense" class="btn-danger hidden">Eliminar</button>
         <div class="spacer"></div>
@@ -301,6 +360,25 @@
     </form>
   </div>
 </div>
+
+<!-- MODAL cuenta de pago -->
+<div id="modal-payment-account" class="modal hidden">
+  <div class="modal-content">
+    <h2>Nueva cuenta</h2>
+    <form id="form-payment-account">
+      <label>¿De quién es? (ej: Papá, Mamá)</label>
+      <input type="text" id="payment-account-owner-name" required />
+      <label>Nombre de la cuenta (ej: Débito Banco Galicia, Efectivo)</label>
+      <input type="text" id="payment-account-label" required />
+      <div class="modal-actions">
+        <div class="spacer"></div>
+        <button type="button" id="btn-cancel-payment-account" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 
 <!-- MODAL registrar pago -->
 <div id="modal-settlement" class="modal hidden">

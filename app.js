@@ -1430,22 +1430,35 @@ function escapeHtml(str) {
 let expensesCache = [];
 let expenseSplitsCache = [];
 let settlementsCache = [];
+let categoriesCache = [];
+let accountsCache = [];
 
 async function loadGastos() {
-  const [{ data: exp }, { data: splits }, { data: sett }] = await Promise.all([
+  const [{ data: exp }, { data: splits }, { data: sett }, { data: cats }, { data: accs }] = await Promise.all([
     sb.from('expenses').select('*').order('expense_date', { ascending: false }),
     sb.from('expense_splits').select('*'),
     sb.from('settlements').select('*').order('settled_date', { ascending: false }),
+    sb.from('expense_categories').select('*').order('name'),
+    sb.from('payment_accounts').select('*').order('owner_name'),
   ]);
   expensesCache = exp || [];
   expenseSplitsCache = splits || [];
   settlementsCache = sett || [];
+  categoriesCache = cats || [];
+  accountsCache = accs || [];
+
+  populateExpenseFilters();
   renderExpenses();
   renderBalances();
   renderSettlements();
+  renderCategories();
+  renderAccounts();
+
   const writeOk = canWrite('gastos');
   $('#btn-add-expense').classList.toggle('hidden', !writeOk);
   $('#btn-add-settlement').classList.toggle('hidden', !writeOk);
+  $('#btn-add-account').classList.toggle('hidden', !writeOk);
+  $('#form-add-category').classList.toggle('hidden', !writeOk);
   $('#gastos-admin-section').classList.toggle('hidden', !myProfile?.is_admin);
 }
 
@@ -1461,18 +1474,86 @@ $('#btn-clear-settlements').addEventListener('click', async () => {
   await loadGastos();
 });
 
+function accountLabel(acc) {
+  return `${acc.owner_name} — ${acc.label}`;
+}
+
+// ----- Filtros -----
+function populateExpenseFilters() {
+  const userSel = $('#expense-filter-user');
+  const userCurrent = userSel.value;
+  userSel.innerHTML = '<option value="">Todos los usuarios</option>' +
+    usersWithModuleAccess('gastos').map(p => `<option value="${p.user_id}">${escapeHtml(p.display_name)}</option>`).join('');
+  if (userCurrent) userSel.value = userCurrent;
+
+  const accSel = $('#expense-filter-account');
+  const accCurrent = accSel.value;
+  accSel.innerHTML = '<option value="">Todas las cuentas</option><option value="__compartido__">Compartido entre hermanos</option>' +
+    accountsCache.map(a => `<option value="${a.id}">${escapeHtml(accountLabel(a))}</option>`).join('');
+  if (accCurrent) accSel.value = accCurrent;
+
+  const catSel = $('#expense-filter-category');
+  const catCurrent = catSel.value;
+  catSel.innerHTML = '<option value="">Todas las categorías</option>' +
+    categoriesCache.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  if (catCurrent) catSel.value = catCurrent;
+}
+
+function getFilteredExpenses() {
+  const userFilter = $('#expense-filter-user').value;
+  const accFilter = $('#expense-filter-account').value;
+  const catFilter = $('#expense-filter-category').value;
+  const fromFilter = $('#expense-filter-from').value;
+  const toFilter = $('#expense-filter-to').value;
+
+  return expensesCache.filter(exp => {
+    if (userFilter) {
+      const splits = expenseSplitsCache.filter(s => s.expense_id === exp.id).map(s => s.user_id);
+      const involved = exp.paid_by === userFilter || exp.created_by === userFilter || splits.includes(userFilter);
+      if (!involved) return false;
+    }
+    if (accFilter === '__compartido__' && exp.expense_type !== 'compartido') return false;
+    if (accFilter && accFilter !== '__compartido__' && exp.payment_account_id !== accFilter) return false;
+    if (catFilter && exp.category_id !== catFilter) return false;
+    if (fromFilter && exp.expense_date < fromFilter) return false;
+    if (toFilter && exp.expense_date > toFilter) return false;
+    return true;
+  });
+}
+
+['expense-filter-user', 'expense-filter-account', 'expense-filter-category', 'expense-filter-from', 'expense-filter-to'].forEach(id => {
+  $(`#${id}`).addEventListener('change', renderExpenses);
+});
+$('#btn-clear-expense-filters').addEventListener('click', () => {
+  $('#expense-filter-user').value = '';
+  $('#expense-filter-account').value = '';
+  $('#expense-filter-category').value = '';
+  $('#expense-filter-from').value = '';
+  $('#expense-filter-to').value = '';
+  renderExpenses();
+});
+
 function renderExpenses() {
   const container = $('#expenses-list');
   container.innerHTML = '';
-  if (expensesCache.length === 0) {
-    container.innerHTML = '<p class="hint">Todavía no cargaste gastos.</p>';
+  const filtered = getFilteredExpenses();
+  if (filtered.length === 0) {
+    container.innerHTML = '<p class="hint">No hay gastos que coincidan.</p>';
     return;
   }
   const writeOk = canWrite('gastos');
-  expensesCache.forEach(exp => {
+  filtered.forEach(exp => {
     const splits = expenseSplitsCache.filter(s => s.expense_id === exp.id);
+    const cat = categoriesCache.find(c => c.id === exp.category_id);
+    const account = accountsCache.find(a => a.id === exp.payment_account_id);
     const row = document.createElement('div');
     row.className = 'expense-row';
+    let subline;
+    if (exp.expense_type === 'cuenta_externa') {
+      subline = `${formatDate(new Date(exp.expense_date))} · 💳 ${escapeHtml(account ? accountLabel(account) : 'Cuenta eliminada')}${cat ? ' · ' + escapeHtml(cat.name) : ''}`;
+    } else {
+      subline = `${formatDate(new Date(exp.expense_date))} · Pagó ${escapeHtml(profileName(exp.paid_by))} · Entre: ${splits.map(s => escapeHtml(profileName(s.user_id))).join(', ')}${cat ? ' · ' + escapeHtml(cat.name) : ''}`;
+    }
     row.innerHTML = `
       <div class="top-line">
         <span>${escapeHtml(exp.description)}</span>
@@ -1488,7 +1569,7 @@ function renderExpenses() {
           </span>` : ''}
         </span>
       </div>
-      <div class="meta">${formatDate(new Date(exp.expense_date))} · Pagó ${escapeHtml(profileName(exp.paid_by))} · Entre: ${splits.map(s => escapeHtml(profileName(s.user_id))).join(', ')}${exp.category ? ' · ' + escapeHtml(exp.category) : ''}</div>
+      <div class="meta">${subline}</div>
     `;
     container.appendChild(row);
   });
@@ -1523,12 +1604,15 @@ document.addEventListener('click', () => {
 
 function computeNetBalances() {
   // positivo = a favor; negativo = pendiente
+  // Solo entran los gastos "compartidos entre hermanos" — los pagados
+  // con cuenta de Papá/Mamá quedan totalmente afuera del balance.
   const net = {};
   usersWithModuleAccess('gastos').forEach(p => { net[p.user_id] = 0; });
-  expensesCache.forEach(exp => {
+  expensesCache.filter(exp => exp.expense_type === 'compartido').forEach(exp => {
     if (exp.paid_by in net) net[exp.paid_by] = (net[exp.paid_by] || 0) + Number(exp.amount);
   });
-  expenseSplitsCache.forEach(s => {
+  const compartidoIds = new Set(expensesCache.filter(exp => exp.expense_type === 'compartido').map(e => e.id));
+  expenseSplitsCache.filter(s => compartidoIds.has(s.expense_id)).forEach(s => {
     if (s.user_id in net) net[s.user_id] = (net[s.user_id] || 0) - Number(s.share_amount);
   });
   settlementsCache.forEach(s => {
@@ -1624,16 +1708,135 @@ function renderSettlements() {
   });
 }
 
+// ----- Categorías -----
+function renderCategories() {
+  const container = $('#categories-list');
+  container.innerHTML = '';
+  const writeOk = canWrite('gastos');
+  if (categoriesCache.length === 0) {
+    container.innerHTML = '<p class="hint">Sin categorías todavía.</p>';
+    return;
+  }
+  categoriesCache.forEach(c => {
+    const row = document.createElement('div');
+    row.className = 'category-row';
+    row.innerHTML = `
+      <span class="label">${escapeHtml(c.name)}</span>
+      ${writeOk ? `<button type="button" class="btn-x" data-id="${c.id}">✕</button>` : ''}
+    `;
+    if (writeOk) {
+      row.querySelector('.btn-x').addEventListener('click', async () => {
+        if (!confirm(`¿Eliminar la categoría "${c.name}"? Los gastos que la usaban quedan sin categoría.`)) return;
+        await sb.from('expense_categories').delete().eq('id', c.id);
+        await loadGastos();
+      });
+    }
+    container.appendChild(row);
+  });
+}
+
+$('#form-add-category').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = $('#new-category-name').value.trim();
+  if (!name) return;
+  const { error } = await sb.from('expense_categories').insert({ name });
+  if (error) { alert('Ya existe esa categoría o hubo un error: ' + error.message); return; }
+  $('#new-category-name').value = '';
+  await loadGastos();
+});
+
+// ----- Cuentas de pago (Papá/Mamá, etc.) -----
+function renderAccounts() {
+  const container = $('#accounts-list');
+  container.innerHTML = '';
+  const writeOk = canWrite('gastos');
+  if (accountsCache.length === 0) {
+    container.innerHTML = '<p class="hint">Sin cuentas cargadas todavía.</p>';
+    return;
+  }
+  accountsCache.forEach(a => {
+    const row = document.createElement('div');
+    row.className = 'account-row';
+    row.innerHTML = `
+      <div>
+        <div class="label">${escapeHtml(a.label)}</div>
+        <div class="owner">${escapeHtml(a.owner_name)}</div>
+      </div>
+      ${writeOk ? `<button type="button" class="btn-x" data-id="${a.id}">✕</button>` : ''}
+    `;
+    if (writeOk) {
+      row.querySelector('.btn-x').addEventListener('click', async () => {
+        if (!confirm(`¿Eliminar la cuenta "${a.label}" de ${a.owner_name}?`)) return;
+        await sb.from('payment_accounts').delete().eq('id', a.id);
+        await loadGastos();
+      });
+    }
+    container.appendChild(row);
+  });
+}
+
+$('#btn-add-account').addEventListener('click', () => {
+  $('#form-payment-account').reset();
+  $('#modal-payment-account').classList.remove('hidden');
+});
+$('#btn-cancel-payment-account').addEventListener('click', () => $('#modal-payment-account').classList.add('hidden'));
+
+$('#form-payment-account').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const ownerName = $('#payment-account-owner-name').value.trim();
+  const label = $('#payment-account-label').value.trim();
+  if (!ownerName || !label) return;
+  const { error } = await sb.from('payment_accounts').insert({ owner_name: ownerName, label });
+  if (error) { alert('Error: ' + error.message); return; }
+  $('#modal-payment-account').classList.add('hidden');
+  await loadGastos();
+});
+
 // ----- Modal gasto -----
 $('#btn-add-expense').addEventListener('click', () => openExpenseModal(null));
 $('#btn-cancel-expense').addEventListener('click', () => $('#modal-expense').classList.add('hidden'));
+
+$('#expense-type-toggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('.segmented-btn');
+  if (!btn) return;
+  $$('#expense-type-toggle .segmented-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const isExterna = btn.dataset.type === 'cuenta_externa';
+  $('#expense-compartido-fields').classList.toggle('hidden', isExterna);
+  $('#expense-cuenta-fields').classList.toggle('hidden', !isExterna);
+});
+
+function currentExpenseType() {
+  return $('#expense-type-toggle .segmented-btn.active')?.dataset.type || 'compartido';
+}
 
 function openExpenseModal(expenseId) {
   $('#form-expense').reset();
   $('#btn-delete-expense').classList.add('hidden');
   $('#expense-date').value = todayStr();
 
+  // Categoría
+  $('#expense-category').innerHTML = '<option value="">Sin categoría</option>' +
+    categoriesCache.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+
+  // Cuenta externa
+  $('#expense-account').innerHTML = accountsCache.length
+    ? accountsCache.map(a => `<option value="${a.id}">${escapeHtml(accountLabel(a))}</option>`).join('')
+    : '<option value="">No hay cuentas cargadas — agregá una en la pestaña "Cuentas"</option>';
+
+  // Pagado por: admin puede elegir, el resto queda fijo en sí mismo
   const eligible = usersWithModuleAccess('gastos');
+  if (myProfile?.is_admin) {
+    $('#expense-paid-by-display').classList.add('hidden');
+    $('#expense-paid-by-select').classList.remove('hidden');
+    $('#expense-paid-by-select').innerHTML = eligible.map(p =>
+      `<option value="${p.user_id}">${escapeHtml(p.display_name)}${p.user_id === currentUser.id ? ' (vos)' : ''}</option>`
+    ).join('');
+  } else {
+    $('#expense-paid-by-display').classList.remove('hidden');
+    $('#expense-paid-by-select').classList.add('hidden');
+  }
+
   const participantsDiv = $('#expense-participants');
   participantsDiv.innerHTML = '';
   const existingSplits = expenseId ? expenseSplitsCache.filter(s => s.expense_id === expenseId).map(s => s.user_id) : eligible.map(p => p.user_id);
@@ -1646,6 +1849,11 @@ function openExpenseModal(expenseId) {
     participantsDiv.appendChild(chip);
   });
 
+  // Tipo de gasto (por defecto: compartido)
+  $$('#expense-type-toggle .segmented-btn').forEach(b => b.classList.toggle('active', b.dataset.type === 'compartido'));
+  $('#expense-compartido-fields').classList.remove('hidden');
+  $('#expense-cuenta-fields').classList.add('hidden');
+
   if (expenseId) {
     const exp = expensesCache.find(e => e.id === expenseId);
     $('#modal-expense-title').textContent = 'Editar gasto';
@@ -1653,16 +1861,26 @@ function openExpenseModal(expenseId) {
     $('#expense-description').value = exp.description;
     $('#expense-amount').value = exp.amount;
     $('#expense-date').value = exp.expense_date;
-    $('#expense-paid-by').value = exp.paid_by;
-    $('#expense-paid-by-display').textContent = profileName(exp.paid_by);
-    $('#expense-category').value = exp.category || '';
+    $('#expense-category').value = exp.category_id || '';
     $('#expense-notes').value = exp.notes || '';
     $('#btn-delete-expense').classList.remove('hidden');
+
+    if (exp.expense_type === 'cuenta_externa') {
+      $$('#expense-type-toggle .segmented-btn').forEach(b => b.classList.toggle('active', b.dataset.type === 'cuenta_externa'));
+      $('#expense-compartido-fields').classList.add('hidden');
+      $('#expense-cuenta-fields').classList.remove('hidden');
+      $('#expense-account').value = exp.payment_account_id || '';
+    } else {
+      $('#expense-paid-by').value = exp.paid_by;
+      $('#expense-paid-by-display').textContent = profileName(exp.paid_by);
+      if (myProfile?.is_admin) $('#expense-paid-by-select').value = exp.paid_by;
+    }
   } else {
     $('#modal-expense-title').textContent = 'Nuevo gasto';
     $('#expense-id').value = '';
     $('#expense-paid-by').value = currentUser.id;
     $('#expense-paid-by-display').textContent = profileName(currentUser.id) + ' (vos)';
+    if (myProfile?.is_admin) $('#expense-paid-by-select').value = currentUser.id;
   }
   $('#modal-expense').classList.remove('hidden');
 }
@@ -1673,32 +1891,58 @@ $('#form-expense').addEventListener('submit', async (e) => {
   const description = $('#expense-description').value.trim();
   const amount = Number($('#expense-amount').value);
   const expenseDate = $('#expense-date').value;
-  const paidBy = $('#expense-paid-by').value;
-  const category = $('#expense-category').value.trim() || null;
+  const categoryId = $('#expense-category').value || null;
   const notes = $('#expense-notes').value.trim() || null;
-  const participants = [...$('#expense-participants').querySelectorAll('.participant-chip.selected')].map(c => c.dataset.userId);
-
-  if (participants.length === 0) { alert('Elegí al menos un participante.'); return; }
+  const expenseType = currentExpenseType();
 
   try {
-    let savedId = expenseId;
-    if (expenseId) {
-      const { error } = await sb.from('expenses').update({ description, amount, expense_date: expenseDate, paid_by: paidBy, category, notes }).eq('id', expenseId);
-      if (error) throw new Error(error.message);
-      await sb.from('expense_splits').delete().eq('expense_id', expenseId);
+    if (expenseType === 'cuenta_externa') {
+      const accountId = $('#expense-account').value;
+      if (!accountId) { alert('Elegí una cuenta (o cargá una primero en la pestaña "Cuentas").'); return; }
+
+      const payload = {
+        description, amount, expense_date: expenseDate, category_id: categoryId, notes,
+        expense_type: 'cuenta_externa', payment_account_id: accountId,
+        paid_by: null, created_by: currentUser.id,
+      };
+      let savedId = expenseId;
+      if (expenseId) {
+        const { error } = await sb.from('expenses').update(payload).eq('id', expenseId);
+        if (error) throw new Error(error.message);
+        await sb.from('expense_splits').delete().eq('expense_id', expenseId);
+      } else {
+        const { data, error } = await sb.from('expenses').insert(payload).select().single();
+        if (error) throw new Error(error.message);
+        savedId = data.id;
+      }
     } else {
-      const { data, error } = await sb.from('expenses').insert({ description, amount, expense_date: expenseDate, paid_by: paidBy, category, notes }).select().single();
-      if (error) throw new Error(error.message);
-      savedId = data.id;
+      const paidBy = myProfile?.is_admin ? $('#expense-paid-by-select').value : $('#expense-paid-by').value;
+      const participants = [...$('#expense-participants').querySelectorAll('.participant-chip.selected')].map(c => c.dataset.userId);
+      if (participants.length === 0) { alert('Elegí al menos un participante.'); return; }
+
+      const payload = {
+        description, amount, expense_date: expenseDate, category_id: categoryId, notes,
+        expense_type: 'compartido', payment_account_id: null,
+        paid_by: paidBy, created_by: currentUser.id,
+      };
+      let savedId = expenseId;
+      if (expenseId) {
+        const { error } = await sb.from('expenses').update(payload).eq('id', expenseId);
+        if (error) throw new Error(error.message);
+        await sb.from('expense_splits').delete().eq('expense_id', expenseId);
+      } else {
+        const { data, error } = await sb.from('expenses').insert(payload).select().single();
+        if (error) throw new Error(error.message);
+        savedId = data.id;
+      }
+      const share = Math.round((amount / participants.length) * 100) / 100;
+      const splits = participants.map((uid, idx) => ({
+        expense_id: savedId, user_id: uid,
+        share_amount: idx === participants.length - 1 ? Math.round((amount - share * (participants.length - 1)) * 100) / 100 : share,
+      }));
+      const { error: splitErr } = await sb.from('expense_splits').insert(splits);
+      if (splitErr) throw new Error(splitErr.message);
     }
-    const share = Math.round((amount / participants.length) * 100) / 100;
-    const splits = participants.map((uid, idx) => ({
-      expense_id: savedId, user_id: uid,
-      // ajustar centavos de redondeo en el último participante
-      share_amount: idx === participants.length - 1 ? Math.round((amount - share * (participants.length - 1)) * 100) / 100 : share,
-    }));
-    const { error: splitErr } = await sb.from('expense_splits').insert(splits);
-    if (splitErr) throw new Error(splitErr.message);
 
     $('#modal-expense').classList.add('hidden');
     await loadGastos();

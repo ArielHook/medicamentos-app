@@ -651,6 +651,42 @@ select {
 }
 .checkbox-label input { width: auto; }
 
+.segmented {
+  display: flex;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin-top: 4px;
+}
+.segmented-btn {
+  flex: 1;
+  padding: 10px 6px;
+  background: white;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+.segmented-btn + .segmented-btn { border-left: 1px solid var(--border); }
+.segmented-btn.active {
+  background: var(--navy);
+  color: white;
+}
+
+.account-row, .category-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: white;
+  padding: 12px 14px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.account-row .owner { font-size: 12px; color: var(--muted); font-weight: 600; }
+.account-row .label, .category-row .label { font-weight: 700; }
+
 .participant-chip {
   display: inline-flex;
   align-items: center;
