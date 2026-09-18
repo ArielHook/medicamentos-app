@@ -363,6 +363,28 @@ select {
   opacity: 0.5;
 }
 
+.btn-toggle-filters {
+  display: block;
+  width: 100%;
+  background: white;
+  border: 1px solid var(--border);
+  color: var(--navy);
+  padding: 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin: 10px 0;
+}
+#expense-filter-count {
+  background: var(--navy);
+  color: white;
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+  margin-left: 4px;
+}
+
 .filter-bar {
   background: white;
   border-radius: 14px;

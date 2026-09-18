@@ -1514,9 +1514,10 @@ function getFilteredExpenses() {
 
   return expensesCache.filter(exp => {
     if (userFilter) {
-      const splits = expenseSplitsCache.filter(s => s.expense_id === exp.id).map(s => s.user_id);
-      const involved = exp.paid_by === userFilter || exp.created_by === userFilter || splits.includes(userFilter);
-      if (!involved) return false;
+      // Solo por quién pagó (o quién lo cargó, en gastos de cuenta
+      // externa) — no por ser uno de los que participa del reparto,
+      // porque eso hacía que casi todo apareciera igual.
+      if (exp.paid_by !== userFilter && exp.created_by !== userFilter) return false;
     }
     if (accFilter === '__compartido__' && exp.expense_type !== 'compartido') return false;
     if (accFilter && accFilter !== '__compartido__' && exp.payment_account_id !== accFilter) return false;
@@ -1538,8 +1539,20 @@ $('#btn-clear-expense-filters').addEventListener('click', () => {
   $('#expense-filter-to').value = '';
   renderExpenses();
 });
+$('#btn-toggle-expense-filters').addEventListener('click', () => {
+  $('#expense-filter-bar').classList.toggle('hidden');
+});
+
+function updateExpenseFilterCount() {
+  const active = [
+    $('#expense-filter-user').value, $('#expense-filter-account').value, $('#expense-filter-category').value,
+    $('#expense-filter-from').value, $('#expense-filter-to').value,
+  ].filter(Boolean).length;
+  $('#expense-filter-count').textContent = active > 0 ? `(${active})` : '';
+}
 
 function renderExpenses() {
+  updateExpenseFilterCount();
   const container = $('#expenses-list');
   container.innerHTML = '';
   const filtered = getFilteredExpenses();

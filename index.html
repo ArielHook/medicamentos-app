@@ -141,9 +141,10 @@
       <div id="gtab-gastos" class="tab-content">
         <button id="btn-add-expense" class="btn-primary btn-block">+ Agregar gasto</button>
 
-        <div class="filter-bar">
+        <button type="button" id="btn-toggle-expense-filters" class="btn-toggle-filters">🔍 Filtros <span id="expense-filter-count"></span></button>
+        <div class="filter-bar hidden" id="expense-filter-bar">
           <div class="filter-field">
-            <label>Usuario</label>
+            <label>Pagado por</label>
             <select id="expense-filter-user"></select>
           </div>
           <div class="filter-field">
