@@ -606,6 +606,24 @@ select {
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 .history-row .when { color: var(--muted); font-size: 11px; }
+.activity-details {
+  white-space: pre-line;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+}
+.activity-module-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #eef1f7;
+  color: var(--navy);
+  margin-left: 6px;
+}
 
 .expense-row {
   background: white;

@@ -226,12 +226,41 @@
     <div id="module-admin" class="module-view hidden">
       <nav class="tabs">
         <button class="tab active" data-target="admin-tab-users">Usuarios y permisos</button>
+        <button class="tab" data-target="admin-tab-activity">Actividad</button>
         <button class="tab" data-target="admin-tab-history">Historial de accesos</button>
       </nav>
 
       <div id="admin-tab-users" class="tab-content">
         <button id="btn-add-user" class="btn-primary btn-block">+ Crear usuario nuevo</button>
         <div id="users-permissions-list"></div>
+      </div>
+
+      <div id="admin-tab-activity" class="tab-content hidden">
+        <p class="hint">Para detectar errores o usos inesperados: quién creó, editó o borró qué cosa, y qué cambió exactamente. Por ahora cubre Gastos y Administración.</p>
+        <div class="filter-bar">
+          <div class="filter-field">
+            <label>Usuario</label>
+            <select id="activity-filter-user"></select>
+          </div>
+          <div class="filter-field">
+            <label>Módulo</label>
+            <select id="activity-filter-module"></select>
+          </div>
+          <div class="filter-field">
+            <label>Acción</label>
+            <select id="activity-filter-action"></select>
+          </div>
+          <div class="filter-field">
+            <label>Desde</label>
+            <input type="date" id="activity-filter-from" />
+          </div>
+          <div class="filter-field">
+            <label>Hasta</label>
+            <input type="date" id="activity-filter-to" />
+          </div>
+          <button type="button" id="btn-clear-activity-filters" class="btn-secondary btn-block">Limpiar filtros</button>
+        </div>
+        <div id="activity-log-list"></div>
       </div>
 
       <div id="admin-tab-history" class="tab-content hidden">

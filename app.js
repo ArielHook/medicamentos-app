@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'v30';
+const APP_VERSION = 'v31';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -238,6 +238,49 @@ $('#btn-logout-everywhere').addEventListener('click', async () => {
 
 function profileName(userId) {
   return allProfiles.find(p => p.user_id === userId)?.display_name || '—';
+}
+
+// ---------- REGISTRO DE ACTIVIDAD (para Admin) ----------
+function logActivity(module, action, description, details) {
+  sb.from('activity_log').insert({
+    user_id: currentUser.id, module, action, description, details: details || null,
+  }).then(() => {});
+}
+
+function money(n) {
+  return `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+}
+
+// Compara dos versiones de un gasto y devuelve un texto tipo
+// "Monto: $150.000 → $170.000" para cada campo que cambió.
+function diffExpense(before, after, beforeParticipants, afterParticipants) {
+  const lines = [];
+  if (before.description !== after.description) lines.push(`Descripción: "${before.description}" → "${after.description}"`);
+  if (Number(before.amount) !== Number(after.amount)) lines.push(`Monto: ${money(before.amount)} → ${money(after.amount)}`);
+  if (before.expense_date !== after.expense_date) lines.push(`Fecha: ${before.expense_date} → ${after.expense_date}`);
+  if ((before.category_id || null) !== (after.category_id || null)) {
+    const catName = (id) => categoriesCache.find(c => c.id === id)?.name || 'Sin categoría';
+    lines.push(`Categoría: ${catName(before.category_id)} → ${catName(after.category_id)}`);
+  }
+  if (before.expense_type !== after.expense_type) {
+    lines.push(`Tipo: ${before.expense_type === 'cuenta_externa' ? 'Cuenta externa' : 'Compartido'} → ${after.expense_type === 'cuenta_externa' ? 'Cuenta externa' : 'Compartido'}`);
+  }
+  if ((before.paid_by || null) !== (after.paid_by || null)) {
+    lines.push(`Pagó: ${before.paid_by ? profileName(before.paid_by) : '—'} → ${after.paid_by ? profileName(after.paid_by) : '—'}`);
+  }
+  if ((before.payment_account_id || null) !== (after.payment_account_id || null)) {
+    const accName = (id) => { const a = accountsCache.find(x => x.id === id); return a ? accountLabel(a) : '—'; };
+    lines.push(`Cuenta: ${accName(before.payment_account_id)} → ${accName(after.payment_account_id)}`);
+  }
+  if (beforeParticipants && afterParticipants) {
+    const beforeSet = new Set(beforeParticipants);
+    const afterSet = new Set(afterParticipants);
+    const added = afterParticipants.filter(id => !beforeSet.has(id)).map(profileName);
+    const removed = beforeParticipants.filter(id => !afterSet.has(id)).map(profileName);
+    if (added.length) lines.push(`Participantes: se agregó a ${added.join(', ')}`);
+    if (removed.length) lines.push(`Participantes: se quitó a ${removed.join(', ')}`);
+  }
+  return lines.join('\n');
 }
 
 // ---------- TABS (genérico, funciona dentro de cualquier módulo) ----------
@@ -1473,13 +1516,17 @@ async function loadGastos() {
 
 $('#btn-clear-expenses').addEventListener('click', async () => {
   if (!confirm('Esto borra TODOS los gastos cargados (y su reparto). Los pagos registrados no se tocan. ¿Continuar?')) return;
+  const count = expensesCache.length;
   await sb.from('expenses').delete().not('id', 'is', null);
+  logActivity('gastos', 'delete', `Borró TODOS los gastos (${count} en total)`);
   await loadGastos();
 });
 
 $('#btn-clear-settlements').addEventListener('click', async () => {
   if (!confirm('Esto borra TODOS los pagos registrados entre usuarios. ¿Continuar?')) return;
+  const count = settlementsCache.length;
   await sb.from('settlements').delete().not('id', 'is', null);
+  logActivity('gastos', 'delete', `Borró TODOS los pagos registrados (${count} en total)`);
   await loadGastos();
 });
 
@@ -1637,7 +1684,9 @@ function renderExpenses() {
         openExpenseModal(id);
       } else if (item.dataset.action === 'delete') {
         if (confirm('¿Eliminar este gasto?')) {
+          const exp = expensesCache.find(x => x.id === id);
           await sb.from('expenses').delete().eq('id', id);
+          if (exp) logActivity('gastos', 'delete', `Gasto: ${exp.description} (${money(exp.amount)})`);
           await loadGastos();
         }
       }
@@ -1963,6 +2012,7 @@ function renderCategories() {
         if (!newName) return;
         const { error } = await sb.from('expense_categories').update({ name: newName }).eq('id', c.id);
         if (error) { alert('Error: ' + error.message); return; }
+        logActivity('gastos', 'update', `Categoría: "${c.name}" → "${newName}"`);
         editingCategoryId = null;
         await loadGastos();
       });
@@ -1987,6 +2037,7 @@ function renderCategories() {
         row.querySelector('[data-del]').addEventListener('click', async () => {
           if (!confirm(`¿Eliminar la categoría "${c.name}"? Los gastos que la usaban quedan sin categoría.`)) return;
           await sb.from('expense_categories').delete().eq('id', c.id);
+          logActivity('gastos', 'delete', `Categoría: "${c.name}"`);
           await loadGastos();
         });
       }
@@ -2001,6 +2052,7 @@ $('#form-add-category').addEventListener('submit', async (e) => {
   if (!name) return;
   const { error } = await sb.from('expense_categories').insert({ name });
   if (error) { alert('Ya existe esa categoría o hubo un error: ' + error.message); return; }
+  logActivity('gastos', 'create', `Categoría: "${name}"`);
   $('#new-category-name').value = '';
   await loadGastos();
 });
@@ -2033,6 +2085,7 @@ function renderAccounts() {
       row.querySelector('[data-del-acc]').addEventListener('click', async () => {
         if (!confirm(`¿Eliminar la cuenta "${a.label}" de ${a.owner_name}?`)) return;
         await sb.from('payment_accounts').delete().eq('id', a.id);
+        logActivity('gastos', 'delete', `Cuenta: ${accountLabel(a)}`);
         await loadGastos();
       });
     }
@@ -2066,10 +2119,16 @@ $('#form-payment-account').addEventListener('submit', async (e) => {
   const ownerName = $('#payment-account-owner-name').value.trim();
   const label = $('#payment-account-label').value.trim();
   if (!ownerName || !label) return;
+  const before = id ? accountsCache.find(x => x.id === id) : null;
   const { error } = id
     ? await sb.from('payment_accounts').update({ owner_name: ownerName, label }).eq('id', id)
     : await sb.from('payment_accounts').insert({ owner_name: ownerName, label });
   if (error) { alert('Error: ' + error.message); return; }
+  if (id) {
+    logActivity('gastos', 'update', `Cuenta: ${accountLabel(before)} → ${ownerName} — ${label}`);
+  } else {
+    logActivity('gastos', 'create', `Cuenta: ${ownerName} — ${label}`);
+  }
   $('#modal-payment-account').classList.add('hidden');
   await loadGastos();
 });
@@ -2078,7 +2137,9 @@ $('#btn-delete-payment-account').addEventListener('click', async () => {
   const id = $('#payment-account-id').value;
   if (!id) return;
   if (!confirm('¿Eliminar esta cuenta?')) return;
+  const a = accountsCache.find(x => x.id === id);
   await sb.from('payment_accounts').delete().eq('id', id);
+  if (a) logActivity('gastos', 'delete', `Cuenta: ${accountLabel(a)}`);
   $('#modal-payment-account').classList.add('hidden');
   await loadGastos();
 });
@@ -2362,6 +2423,9 @@ $('#form-expense').addEventListener('submit', async (e) => {
   const isFixed = $('#expense-is-fixed').value === '1';
   const expenseType = currentExpenseType();
 
+  const before = expenseId ? expensesCache.find(x => x.id === expenseId) : null;
+  const beforeParticipants = expenseId ? expenseSplitsCache.filter(s => s.expense_id === expenseId).map(s => s.user_id) : null;
+
   try {
     if (expenseType === 'cuenta_externa') {
       const accountId = $('#expense-account').value;
@@ -2377,10 +2441,13 @@ $('#form-expense').addEventListener('submit', async (e) => {
         const { error } = await sb.from('expenses').update(payload).eq('id', expenseId);
         if (error) throw new Error(error.message);
         await sb.from('expense_splits').delete().eq('expense_id', expenseId);
+        const diff = diffExpense(before, payload, beforeParticipants, []);
+        logActivity('gastos', 'update', `Gasto: ${description} (${money(amount)})`, diff);
       } else {
         const { data, error } = await sb.from('expenses').insert(payload).select().single();
         if (error) throw new Error(error.message);
         savedId = data.id;
+        logActivity('gastos', 'create', `Gasto: ${description} (${money(amount)})`, `Cuenta externa: ${accountLabel(accountsCache.find(a => a.id === accountId))}`);
       }
     } else {
       const paidBy = myProfile?.is_admin ? $('#expense-paid-by-select').value : $('#expense-paid-by').value;
@@ -2397,10 +2464,13 @@ $('#form-expense').addEventListener('submit', async (e) => {
         const { error } = await sb.from('expenses').update(payload).eq('id', expenseId);
         if (error) throw new Error(error.message);
         await sb.from('expense_splits').delete().eq('expense_id', expenseId);
+        const diff = diffExpense(before, payload, beforeParticipants, participants);
+        logActivity('gastos', 'update', `Gasto: ${description} (${money(amount)})`, diff);
       } else {
         const { data, error } = await sb.from('expenses').insert(payload).select().single();
         if (error) throw new Error(error.message);
         savedId = data.id;
+        logActivity('gastos', 'create', `Gasto: ${description} (${money(amount)})`, `Pagó: ${profileName(paidBy)}. Entre: ${participants.map(profileName).join(', ')}`);
       }
       const share = Math.round((amount / participants.length) * 100) / 100;
       const splits = participants.map((uid, idx) => ({
@@ -2422,7 +2492,9 @@ $('#btn-delete-expense').addEventListener('click', async () => {
   const id = $('#expense-id').value;
   if (!id) return;
   if (!confirm('¿Eliminar este gasto?')) return;
+  const exp = expensesCache.find(x => x.id === id);
   await sb.from('expenses').delete().eq('id', id);
+  if (exp) logActivity('gastos', 'delete', `Gasto: ${exp.description} (${money(exp.amount)})`);
   $('#modal-expense').classList.add('hidden');
   await loadGastos();
 });
@@ -2450,6 +2522,7 @@ $('#form-settlement').addEventListener('submit', async (e) => {
   if (fromUser === toUser) { alert('Elegí dos personas distintas.'); return; }
   const { error } = await sb.from('settlements').insert({ from_user: fromUser, to_user: toUser, amount, settled_date: settledDate, notes });
   if (error) { alert('Error: ' + error.message); return; }
+  logActivity('gastos', 'create', `Pago: ${profileName(fromUser)} → ${profileName(toUser)} (${money(amount)})`);
   $('#modal-settlement').classList.add('hidden');
   await loadGastos();
 });
@@ -2467,7 +2540,91 @@ async function loadAdmin() {
   loginHistoryCache = history || [];
   populateHistoryUserFilter();
   renderLoginHistory();
+
+  const { data: activity } = await sb.from('activity_log').select('*').order('created_at', { ascending: false }).limit(500);
+  activityLogCache = activity || [];
+  populateActivityFilters();
+  renderActivityLog();
 }
+
+// ----- Actividad (auditoría) -----
+let activityLogCache = [];
+const ACTIVITY_MODULE_LABELS = { gastos: '💰 Gastos', admin: '⚙️ Admin', medicamentos: '💊 Medicamentos', mercaderia: '🛒 Mercadería' };
+const ACTIVITY_ACTION_LABELS = { create: 'creó', update: 'editó', delete: 'eliminó' };
+
+function populateActivityFilters() {
+  const userSel = $('#activity-filter-user');
+  const userCurrent = userSel.value;
+  userSel.innerHTML = '<option value="">Todos los usuarios</option>' +
+    allProfiles.map(p => `<option value="${p.user_id}">${escapeHtml(p.display_name)}</option>`).join('');
+  if (userCurrent) userSel.value = userCurrent;
+
+  const modSel = $('#activity-filter-module');
+  const modCurrent = modSel.value;
+  const modulesPresent = [...new Set(activityLogCache.map(a => a.module))];
+  modSel.innerHTML = '<option value="">Todos los módulos</option>' +
+    modulesPresent.map(m => `<option value="${m}">${ACTIVITY_MODULE_LABELS[m] || m}</option>`).join('');
+  if (modCurrent) modSel.value = modCurrent;
+
+  const actSel = $('#activity-filter-action');
+  const actCurrent = actSel.value;
+  actSel.innerHTML = '<option value="">Todas las acciones</option>'
+    + `<option value="create">Creó</option><option value="update">Editó</option><option value="delete">Eliminó</option>`;
+  if (actCurrent) actSel.value = actCurrent;
+}
+
+function renderActivityLog() {
+  const container = $('#activity-log-list');
+  container.innerHTML = '';
+
+  const userFilter = $('#activity-filter-user').value;
+  const modFilter = $('#activity-filter-module').value;
+  const actFilter = $('#activity-filter-action').value;
+  const fromFilter = $('#activity-filter-from').value;
+  const toFilter = $('#activity-filter-to').value;
+
+  const filtered = activityLogCache.filter(a => {
+    if (userFilter && a.user_id !== userFilter) return false;
+    if (modFilter && a.module !== modFilter) return false;
+    if (actFilter && a.action !== actFilter) return false;
+    const day = a.created_at.slice(0, 10);
+    if (fromFilter && day < fromFilter) return false;
+    if (toFilter && day > toFilter) return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<p class="hint">Sin actividad que coincida con el filtro.</p>';
+    return;
+  }
+  filtered.forEach(a => {
+    const row = document.createElement('div');
+    row.className = 'history-row';
+    const when = new Date(a.created_at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    row.innerHTML = `
+      <div>
+        <strong>${escapeHtml(profileName(a.user_id))}</strong> ${ACTIVITY_ACTION_LABELS[a.action] || a.action}
+        <span class="activity-module-badge">${ACTIVITY_MODULE_LABELS[a.module] || a.module}</span>
+        <br>${escapeHtml(a.description)}
+        ${a.details ? `<div class="activity-details">${escapeHtml(a.details)}</div>` : ''}
+      </div>
+      <div class="when">${when}</div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+['activity-filter-user', 'activity-filter-module', 'activity-filter-action', 'activity-filter-from', 'activity-filter-to'].forEach(id => {
+  $(`#${id}`).addEventListener('change', renderActivityLog);
+});
+$('#btn-clear-activity-filters').addEventListener('click', () => {
+  $('#activity-filter-user').value = '';
+  $('#activity-filter-module').value = '';
+  $('#activity-filter-action').value = '';
+  $('#activity-filter-from').value = '';
+  $('#activity-filter-to').value = '';
+  renderActivityLog();
+});
 
 function populateHistoryUserFilter() {
   const sel = $('#history-filter-user');
@@ -2563,6 +2720,7 @@ function renderAdmin(profiles, perms) {
       // Si se saca "Ver", también se saca "Editar"
       if (field === 'can_read' && !chk.checked) payload.can_write = false;
       await sb.from('module_permissions').upsert(payload);
+      logActivity('admin', 'update', `Permisos de ${profileName(userId)} (${module})`, `${field === 'can_read' ? 'Ver' : 'Editar'}: ${chk.checked ? 'activado' : 'desactivado'}`);
       await loadAdmin();
     });
   });
@@ -2598,6 +2756,7 @@ $('#form-new-user').addEventListener('submit', async (e) => {
     });
     const result = await resp.json();
     if (!resp.ok) throw new Error(result.error || 'Error desconocido');
+    logActivity('admin', 'create', `Usuario nuevo: ${displayName} (${username})${isAdmin ? ' — administrador' : ''}`);
     $('#modal-user').classList.add('hidden');
     await loadAdmin();
   } catch (err) {
