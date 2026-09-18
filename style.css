@@ -385,6 +385,40 @@ select {
   margin-left: 4px;
 }
 
+.date-presets {
+  display: flex;
+  gap: 6px;
+}
+.date-preset-btn {
+  flex: 1;
+  padding: 8px 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #f4f6fa;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.date-preset-btn.active {
+  background: var(--navy);
+  color: white;
+  border-color: var(--navy);
+}
+
+.expenses-summary {
+  display: flex;
+  justify-content: space-around;
+  background: white;
+  border-radius: 14px;
+  padding: 14px;
+  margin-top: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.expenses-summary-item { text-align: center; }
+.expenses-summary-value { font-size: 18px; font-weight: 700; color: var(--navy); }
+.expenses-summary-label { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+
 .filter-bar {
   background: white;
   border-radius: 14px;

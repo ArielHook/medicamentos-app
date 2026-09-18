@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'v28';
+const APP_VERSION = 'v29';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -1540,10 +1540,31 @@ $('#btn-clear-expense-filters').addEventListener('click', () => {
   $('#expense-filter-category').value = '';
   $('#expense-filter-from').value = '';
   $('#expense-filter-to').value = '';
+  $$('.date-preset-btn').forEach(b => b.classList.remove('active'));
   renderExpenses();
 });
 $('#btn-toggle-expense-filters').addEventListener('click', () => {
   $('#expense-filter-bar').classList.toggle('hidden');
+});
+
+$$('.date-preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const today = new Date();
+    const y = today.getFullYear(), m = today.getMonth();
+    const iso = (d) => d.toISOString().slice(0, 10);
+    if (btn.dataset.preset === 'today') {
+      $('#expense-filter-from').value = iso(today);
+      $('#expense-filter-to').value = iso(today);
+    } else if (btn.dataset.preset === 'this-month') {
+      $('#expense-filter-from').value = iso(new Date(y, m, 1));
+      $('#expense-filter-to').value = iso(new Date(y, m + 1, 0));
+    } else if (btn.dataset.preset === 'last-month') {
+      $('#expense-filter-from').value = iso(new Date(y, m - 1, 1));
+      $('#expense-filter-to').value = iso(new Date(y, m, 0));
+    }
+    $$('.date-preset-btn').forEach(b => b.classList.toggle('active', b === btn));
+    renderExpenses();
+  });
 });
 
 function updateExpenseFilterCount() {
@@ -1561,6 +1582,7 @@ function renderExpenses() {
   const filtered = getFilteredExpenses();
   if (filtered.length === 0) {
     container.innerHTML = '<p class="hint">No hay gastos que coincidan.</p>';
+    $('#expenses-summary').classList.add('hidden');
     return;
   }
   const writeOk = canWrite('gastos');
@@ -1620,6 +1642,20 @@ function renderExpenses() {
       }
     });
   });
+
+  const total = filtered.reduce((sum, exp) => sum + Number(exp.amount), 0);
+  const summary = $('#expenses-summary');
+  summary.classList.remove('hidden');
+  summary.innerHTML = `
+    <div class="expenses-summary-item">
+      <div class="expenses-summary-value">${filtered.length}</div>
+      <div class="expenses-summary-label">Gasto${filtered.length === 1 ? '' : 's'}</div>
+    </div>
+    <div class="expenses-summary-item">
+      <div class="expenses-summary-value">$${total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</div>
+      <div class="expenses-summary-label">Total</div>
+    </div>
+  `;
 }
 document.addEventListener('click', () => {
   $$('.expense-menu').forEach(m => m.classList.add('hidden'));

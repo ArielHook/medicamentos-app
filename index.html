@@ -163,10 +163,16 @@
             <label>Hasta</label>
             <input type="date" id="expense-filter-to" />
           </div>
+          <div class="date-presets">
+            <button type="button" class="date-preset-btn" data-preset="today">Hoy</button>
+            <button type="button" class="date-preset-btn" data-preset="this-month">Este mes</button>
+            <button type="button" class="date-preset-btn" data-preset="last-month">Mes pasado</button>
+          </div>
           <button type="button" id="btn-clear-expense-filters" class="btn-secondary btn-block">Limpiar filtros</button>
         </div>
 
         <div id="expenses-list"></div>
+        <div id="expenses-summary" class="expenses-summary hidden"></div>
 
         <div id="gastos-admin-section" class="hidden">
           <h3 class="section-title">Zona de administración</h3>
