@@ -1138,6 +1138,16 @@ select {
 .calendar-cell.empty { visibility: hidden; }
 .calendar-cell.is-today { background: #eef1f7; font-weight: 700; }
 .calendar-cell.has-event { background: var(--warn-bg); }
+.calendar-cell.selected { outline: 2px solid var(--navy); }
+.cal-amount {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--navy);
+  background: white;
+  border-radius: 6px;
+  padding: 1px 3px;
+  margin-top: 2px;
+}
 .cal-daynum { font-size: 12px; }
 .cal-dot {
   background: var(--danger);

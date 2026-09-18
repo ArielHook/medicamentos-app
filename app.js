@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'v29';
+const APP_VERSION = 'v30';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -1583,6 +1583,7 @@ function renderExpenses() {
   if (filtered.length === 0) {
     container.innerHTML = '<p class="hint">No hay gastos que coincidan.</p>';
     $('#expenses-summary').classList.add('hidden');
+    if (!$('#expenses-calendar').classList.contains('hidden')) renderExpensesCalendar();
     return;
   }
   const writeOk = canWrite('gastos');
@@ -1656,6 +1657,142 @@ function renderExpenses() {
       <div class="expenses-summary-label">Total</div>
     </div>
   `;
+  if (!$('#expenses-calendar').classList.contains('hidden')) renderExpensesCalendar();
+}
+
+// ----- Vista calendario de gastos -----
+let expensesCalendarMonth = startOfDay(new Date());
+expensesCalendarMonth.setDate(1);
+let selectedExpenseDay = null;
+
+$('#expenses-view-list').addEventListener('click', () => {
+  $('#expenses-view-list').classList.add('active');
+  $('#expenses-view-calendar').classList.remove('active');
+  $('#expenses-list').classList.remove('hidden');
+  $('#expenses-summary').classList.remove('hidden');
+  $('#expenses-calendar').classList.add('hidden');
+});
+$('#expenses-view-calendar').addEventListener('click', () => {
+  $('#expenses-view-calendar').classList.add('active');
+  $('#expenses-view-list').classList.remove('active');
+  $('#expenses-calendar').classList.remove('hidden');
+  $('#expenses-list').classList.add('hidden');
+  $('#expenses-summary').classList.add('hidden');
+  selectedExpenseDay = null;
+  renderExpensesCalendar();
+});
+
+function renderExpensesCalendar() {
+  const container = $('#expenses-calendar');
+  container.innerHTML = '';
+  const filtered = getFilteredExpenses();
+
+  const monthLabel = expensesCalendarMonth.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+  const nav = document.createElement('div');
+  nav.className = 'calendar-nav';
+  nav.innerHTML = `
+    <button type="button" id="exp-cal-prev" class="btn-icon-small">‹</button>
+    <div class="calendar-month-label">${capitalize(monthLabel)}</div>
+    <button type="button" id="exp-cal-next" class="btn-icon-small">›</button>
+  `;
+  container.appendChild(nav);
+
+  // Mapa día -> {total, items}
+  const byDay = {};
+  filtered.forEach(exp => {
+    const d = new Date(exp.expense_date + 'T00:00:00');
+    const key = d.toDateString();
+    if (!byDay[key]) byDay[key] = { total: 0, items: [] };
+    byDay[key].total += Number(exp.amount);
+    byDay[key].items.push(exp);
+  });
+
+  const grid = document.createElement('div');
+  grid.className = 'calendar-grid';
+  ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa'].forEach(d => {
+    const h = document.createElement('div');
+    h.className = 'calendar-dow';
+    h.textContent = d;
+    grid.appendChild(h);
+  });
+
+  const firstDay = new Date(expensesCalendarMonth);
+  const startOffset = firstDay.getDay();
+  const daysInMonth = new Date(expensesCalendarMonth.getFullYear(), expensesCalendarMonth.getMonth() + 1, 0).getDate();
+  const today = startOfDay(new Date());
+
+  for (let i = 0; i < startOffset; i++) {
+    const empty = document.createElement('div');
+    empty.className = 'calendar-cell empty';
+    grid.appendChild(empty);
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const cellDate = new Date(expensesCalendarMonth.getFullYear(), expensesCalendarMonth.getMonth(), day);
+    const key = cellDate.toDateString();
+    const dayData = byDay[key];
+    const cell = document.createElement('div');
+    cell.className = 'calendar-cell'
+      + (dayData ? ' has-event' : '')
+      + (cellDate.getTime() === today.getTime() ? ' is-today' : '')
+      + (selectedExpenseDay === key ? ' selected' : '');
+    cell.innerHTML = `
+      <div class="cal-daynum">${day}</div>
+      ${dayData ? `<div class="cal-amount">$${Math.round(dayData.total).toLocaleString('es-AR')}</div>` : ''}
+    `;
+    if (dayData) {
+      cell.addEventListener('click', () => {
+        selectedExpenseDay = selectedExpenseDay === key ? null : key;
+        renderExpensesCalendar();
+      });
+    }
+    grid.appendChild(cell);
+  }
+  container.appendChild(grid);
+
+  // Detalle del día seleccionado (o resumen del mes si no hay ninguno)
+  const detail = document.createElement('div');
+  detail.className = 'calendar-events-list';
+  if (selectedExpenseDay && byDay[selectedExpenseDay]) {
+    const dayData = byDay[selectedExpenseDay];
+    const dayDate = new Date(selectedExpenseDay);
+    const title = document.createElement('h3');
+    title.className = 'section-title';
+    title.textContent = `${formatDate(dayDate)} — $${dayData.total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+    detail.appendChild(title);
+    dayData.items.forEach(exp => {
+      const cat = categoriesCache.find(c => c.id === exp.category_id);
+      const account = accountsCache.find(a => a.id === exp.payment_account_id);
+      const row = document.createElement('div');
+      row.className = 'calendar-event-row';
+      const who = exp.expense_type === 'cuenta_externa'
+        ? `💳 ${account ? accountLabel(account) : 'Cuenta eliminada'}`
+        : `Pagó ${escapeHtml(profileName(exp.paid_by))}`;
+      row.innerHTML = `<strong>${escapeHtml(exp.description)}</strong> — $${Number(exp.amount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}<br><span class="shop-meta">${who}${cat ? ' · ' + escapeHtml(cat.name) : ''}</span>`;
+      detail.appendChild(row);
+    });
+  } else {
+    const monthEvents = Object.keys(byDay).filter(key => {
+      const d = new Date(key);
+      return d.getFullYear() === expensesCalendarMonth.getFullYear() && d.getMonth() === expensesCalendarMonth.getMonth();
+    });
+    if (monthEvents.length === 0) {
+      detail.innerHTML = '<p class="hint">Sin gastos este mes.</p>';
+    } else {
+      detail.innerHTML = '<p class="hint">Tocá un día para ver el detalle.</p>';
+    }
+  }
+  container.appendChild(detail);
+
+  $('#exp-cal-prev').addEventListener('click', () => {
+    expensesCalendarMonth.setMonth(expensesCalendarMonth.getMonth() - 1);
+    selectedExpenseDay = null;
+    renderExpensesCalendar();
+  });
+  $('#exp-cal-next').addEventListener('click', () => {
+    expensesCalendarMonth.setMonth(expensesCalendarMonth.getMonth() + 1);
+    selectedExpenseDay = null;
+    renderExpensesCalendar();
+  });
 }
 document.addEventListener('click', () => {
   $$('.expense-menu').forEach(m => m.classList.add('hidden'));
