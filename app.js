@@ -1450,6 +1450,7 @@ async function loadGastos() {
   populateExpenseFilters();
   renderExpenses();
   renderBalances();
+  renderExternalBalances();
   renderSettlements();
   renderCategories();
   renderAccounts();
@@ -1554,6 +1555,7 @@ function renderExpenses() {
     } else {
       subline = `${formatDate(new Date(exp.expense_date))} · Pagó ${escapeHtml(profileName(exp.paid_by))} · Entre: ${splits.map(s => escapeHtml(profileName(s.user_id))).join(', ')}${cat ? ' · ' + escapeHtml(cat.name) : ''}`;
     }
+    if (exp.is_fixed) subline += ' · <span class="fixed-badge">📌 Fijo</span>';
     row.innerHTML = `
       <div class="top-line">
         <span>${escapeHtml(exp.description)}</span>
@@ -1690,6 +1692,36 @@ function renderBalances() {
   }
 }
 
+function renderExternalBalances() {
+  const container = $('#external-balances');
+  container.innerHTML = '';
+  const totals = {}; // owner_name -> {amount, count}
+  expensesCache.filter(exp => exp.expense_type === 'cuenta_externa').forEach(exp => {
+    const acc = accountsCache.find(a => a.id === exp.payment_account_id);
+    const owner = acc ? acc.owner_name : 'Sin cuenta';
+    if (!totals[owner]) totals[owner] = { amount: 0, count: 0 };
+    totals[owner].amount += Number(exp.amount);
+    totals[owner].count += 1;
+  });
+  const owners = Object.keys(totals);
+  if (owners.length === 0) {
+    container.innerHTML = '<p class="hint">Todavía no hay gastos cargados con cuenta de Papá/Mamá.</p>';
+    return;
+  }
+  owners.forEach(owner => {
+    const t = totals[owner];
+    const card = document.createElement('div');
+    card.className = 'external-balance-card';
+    card.innerHTML = `
+      <div class="external-balance-icon">💳</div>
+      <div class="external-balance-owner">${escapeHtml(owner)}</div>
+      <div class="external-balance-amount">$${t.amount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</div>
+      <div class="external-balance-count">${t.count} gasto${t.count === 1 ? '' : 's'}</div>
+    `;
+    container.appendChild(card);
+  });
+}
+
 function renderSettlements() {
   const container = $('#settlements-list');
   container.innerHTML = '';
@@ -1709,6 +1741,8 @@ function renderSettlements() {
 }
 
 // ----- Categorías -----
+let editingCategoryId = null;
+
 function renderCategories() {
   const container = $('#categories-list');
   container.innerHTML = '';
@@ -1720,16 +1754,48 @@ function renderCategories() {
   categoriesCache.forEach(c => {
     const row = document.createElement('div');
     row.className = 'category-row';
-    row.innerHTML = `
-      <span class="label">${escapeHtml(c.name)}</span>
-      ${writeOk ? `<button type="button" class="btn-x" data-id="${c.id}">✕</button>` : ''}
-    `;
-    if (writeOk) {
-      row.querySelector('.btn-x').addEventListener('click', async () => {
-        if (!confirm(`¿Eliminar la categoría "${c.name}"? Los gastos que la usaban quedan sin categoría.`)) return;
-        await sb.from('expense_categories').delete().eq('id', c.id);
+
+    if (editingCategoryId === c.id) {
+      row.innerHTML = `
+        <input type="text" class="category-edit-input" value="${escapeHtml(c.name)}" />
+        <span style="display:flex;gap:4px;">
+          <button type="button" class="btn-icon-xs" data-save="${c.id}" title="Guardar">✓</button>
+          <button type="button" class="btn-icon-xs" data-cancel-edit title="Cancelar">✕</button>
+        </span>
+      `;
+      const input = row.querySelector('.category-edit-input');
+      row.querySelector('[data-save]').addEventListener('click', async () => {
+        const newName = input.value.trim();
+        if (!newName) return;
+        const { error } = await sb.from('expense_categories').update({ name: newName }).eq('id', c.id);
+        if (error) { alert('Error: ' + error.message); return; }
+        editingCategoryId = null;
         await loadGastos();
       });
+      row.querySelector('[data-cancel-edit]').addEventListener('click', () => {
+        editingCategoryId = null;
+        renderCategories();
+      });
+    } else {
+      row.innerHTML = `
+        <span class="label">${escapeHtml(c.name)}</span>
+        ${writeOk ? `
+        <span style="display:flex;gap:4px;">
+          <button type="button" class="btn-icon-xs" data-edit="${c.id}" title="Editar">✎</button>
+          <button type="button" class="btn-icon-xs danger" data-del="${c.id}" title="Eliminar">✕</button>
+        </span>` : ''}
+      `;
+      if (writeOk) {
+        row.querySelector('[data-edit]').addEventListener('click', () => {
+          editingCategoryId = c.id;
+          renderCategories();
+        });
+        row.querySelector('[data-del]').addEventListener('click', async () => {
+          if (!confirm(`¿Eliminar la categoría "${c.name}"? Los gastos que la usaban quedan sin categoría.`)) return;
+          await sb.from('expense_categories').delete().eq('id', c.id);
+          await loadGastos();
+        });
+      }
     }
     container.appendChild(row);
   });
@@ -1863,6 +1929,7 @@ function openExpenseModal(expenseId) {
     $('#expense-date').value = exp.expense_date;
     $('#expense-category').value = exp.category_id || '';
     $('#expense-notes').value = exp.notes || '';
+    $('#expense-is-fixed').checked = !!exp.is_fixed;
     $('#btn-delete-expense').classList.remove('hidden');
 
     if (exp.expense_type === 'cuenta_externa') {
@@ -1893,6 +1960,7 @@ $('#form-expense').addEventListener('submit', async (e) => {
   const expenseDate = $('#expense-date').value;
   const categoryId = $('#expense-category').value || null;
   const notes = $('#expense-notes').value.trim() || null;
+  const isFixed = $('#expense-is-fixed').checked;
   const expenseType = currentExpenseType();
 
   try {
@@ -1901,7 +1969,7 @@ $('#form-expense').addEventListener('submit', async (e) => {
       if (!accountId) { alert('Elegí una cuenta (o cargá una primero en la pestaña "Cuentas").'); return; }
 
       const payload = {
-        description, amount, expense_date: expenseDate, category_id: categoryId, notes,
+        description, amount, expense_date: expenseDate, category_id: categoryId, notes, is_fixed: isFixed,
         expense_type: 'cuenta_externa', payment_account_id: accountId,
         paid_by: null, created_by: currentUser.id,
       };
@@ -1921,7 +1989,7 @@ $('#form-expense').addEventListener('submit', async (e) => {
       if (participants.length === 0) { alert('Elegí al menos un participante.'); return; }
 
       const payload = {
-        description, amount, expense_date: expenseDate, category_id: categoryId, notes,
+        description, amount, expense_date: expenseDate, category_id: categoryId, notes, is_fixed: isFixed,
         expense_type: 'compartido', payment_account_id: null,
         paid_by: paidBy, created_by: currentUser.id,
       };

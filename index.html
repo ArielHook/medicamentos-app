@@ -179,6 +179,10 @@
         <button id="btn-add-settlement" class="btn-secondary btn-block">Registrar un pago entre usuarios</button>
         <h3 class="section-title">Pagos registrados</h3>
         <div id="settlements-list"></div>
+
+        <h3 class="section-title">Gastos de Papá / Mamá</h3>
+        <p class="hint">No se reparten ni afectan el balance de arriba — es solo control de cuánto se gastó de cada cuenta externa.</p>
+        <div id="external-balances" class="external-balances-grid"></div>
       </div>
 
       <div id="gtab-categorias" class="tab-content hidden">
@@ -327,6 +331,7 @@
       <input type="date" id="expense-date" required />
       <label>Categoría</label>
       <select id="expense-category"></select>
+      <label class="checkbox-label"><input type="checkbox" id="expense-is-fixed" /> Es un gasto fijo (recurrente: luz, gas, alquiler, internet, etc.)</label>
 
       <label>¿Cómo se pagó?</label>
       <div class="segmented" id="expense-type-toggle">
