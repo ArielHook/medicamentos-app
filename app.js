@@ -2175,7 +2175,18 @@ function showUpdateBanner() {
   const banner = document.createElement('div');
   banner.id = 'update-banner';
   banner.className = 'update-banner';
-  banner.innerHTML = `🔄 Hay una versión nueva. Actualizando...`;
+  banner.innerHTML = `🔄 Hay una versión nueva. Se va a actualizar en cuanto termines lo que estás haciendo.`;
   document.body.appendChild(banner);
-  setTimeout(() => window.location.reload(), 1800);
+  attemptReload();
+}
+
+function attemptReload() {
+  // No interrumpir si hay un formulario/modal abierto: esperar a que
+  // se cierre antes de recargar, para no cortar algo a mitad de carga.
+  const modalOpen = document.querySelector('.modal:not(.hidden)');
+  if (modalOpen) {
+    setTimeout(attemptReload, 1500);
+  } else {
+    window.location.reload();
+  }
 }
