@@ -882,6 +882,8 @@ select {
 
 .tabs {
   display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   background: white;
   border-bottom: 1px solid var(--border);
   position: sticky;
@@ -889,16 +891,22 @@ select {
   z-index: 4;
 }
 .tab {
-  flex: 1;
-  padding: 12px 6px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 10px 14px;
   background: none;
   border: none;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
   border-bottom: 3px solid transparent;
   cursor: pointer;
+  white-space: nowrap;
 }
+.tab-icon { font-size: 18px; line-height: 1; }
 .tab.active { color: var(--navy); border-bottom-color: var(--navy); }
 
 .update-banner {
