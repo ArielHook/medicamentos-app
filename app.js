@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'v33';
+const APP_VERSION = 'v34';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -2770,7 +2770,10 @@ $('#form-new-user').addEventListener('submit', async (e) => {
 // ---------- PWA: registrar service worker + detectar actualizaciones ----------
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').then((reg) => {
+    // El "?v=" hace que cada versión nueva sea una URL distinta: así el
+    // navegador nunca puede quedarse sirviendo una copia vieja en caché
+    // sin darse cuenta de que hay una más nueva.
+    navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`, { updateViaCache: 'none' }).then((reg) => {
       const handleNewWorker = (newWorker) => {
         newWorker.addEventListener('statechange', () => {
           if (newWorker.state === 'activated') {
