@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'v32';
+const APP_VERSION = 'v33';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -600,7 +600,7 @@ function renderStock() {
         ${med.box_photo_url ? `<img class="stock-thumb" src="${med.box_photo_url}" alt="${escapeHtml(med.name)}" />` : ''}
         <div>
           <div class="name">${escapeHtml(med.name)}${med.drug ? ` <span style="color:#6b7280;font-weight:400">(${escapeHtml(med.drug)})</span>` : ''}</div>
-          <div class="meta">Quedan hoy: ${effectiveQty !== null ? effectiveQty : s.current_quantity} ${escapeHtml(s.unit)} · Consumo: ${daily}/día</div>
+          <div class="meta">Quedan hoy: ${(effectiveQty !== null ? effectiveQty : s.current_quantity).toLocaleString('es-AR')} ${escapeHtml(s.unit)} · Consumo: ${daily}/día</div>
           ${zeroDate ? `<div class="zero-date">${isLow ? '⚠️ ' : ''}Se agota: ${formatDate(zeroDate)} (${days} días)</div>` : `<div class="meta">Sin horarios cargados</div>`}
         </div>
       </div>
@@ -1173,7 +1173,7 @@ function renderLowStockBanner() {
     const row = document.createElement('div');
     row.className = 'low-stock-row';
     row.innerHTML = `
-      <span>${emojiFor(p.name)} ${escapeHtml(p.name)} <span class="shop-meta">(quedan ${p.quantity} ${escapeHtml(p.unit)})</span></span>
+      <span>${emojiFor(p.name)} ${escapeHtml(p.name)} <span class="shop-meta">(quedan ${Number(p.quantity).toLocaleString('es-AR')} ${escapeHtml(p.unit)})</span></span>
       <button type="button" class="btn-quick-add" ${inList ? 'disabled' : ''}>${inList ? 'Ya en la lista' : '+ Agregar'}</button>
     `;
     if (!inList) {
@@ -1904,7 +1904,7 @@ function renderBalances() {
     const card = document.createElement('div');
     card.className = 'balance-card-v2' + (isPositive ? ' positive' : isNegative ? ' negative' : ' neutral');
     const status = isPositive ? 'a favor' : isNegative ? 'pendiente' : 'al día';
-    const amountText = (isPositive || isNegative) ? `$${Math.abs(amount).toFixed(2)}` : '—';
+    const amountText = (isPositive || isNegative) ? money(Math.abs(amount)) : '—';
     const initial = p.display_name.trim().charAt(0).toUpperCase();
     card.innerHTML = `
       <div class="balance-avatar">${escapeHtml(initial)}</div>
@@ -1929,7 +1929,7 @@ function renderBalances() {
     debts.forEach(d => {
       const row = document.createElement('div');
       row.className = 'debt-row';
-      row.innerHTML = `<strong>${escapeHtml(profileName(d.from))}</strong> → <strong>${escapeHtml(profileName(d.to))}</strong>: <strong>$${d.amount.toFixed(2)}</strong>`;
+      row.innerHTML = `<strong>${escapeHtml(profileName(d.from))}</strong> → <strong>${escapeHtml(profileName(d.to))}</strong>: <strong>${money(d.amount)}</strong>`;
       container.appendChild(row);
     });
   }
@@ -1976,7 +1976,7 @@ function renderSettlements() {
     const row = document.createElement('div');
     row.className = 'history-row';
     row.innerHTML = `
-      <div><strong>${escapeHtml(profileName(s.from_user))}</strong> le pagó <strong>$${Number(s.amount).toFixed(2)}</strong> a <strong>${escapeHtml(profileName(s.to_user))}</strong>${s.notes ? ' — ' + escapeHtml(s.notes) : ''}</div>
+      <div><strong>${escapeHtml(profileName(s.from_user))}</strong> le pagó <strong>${money(s.amount)}</strong> a <strong>${escapeHtml(profileName(s.to_user))}</strong>${s.notes ? ' — ' + escapeHtml(s.notes) : ''}</div>
       <div class="when">${formatDate(new Date(s.settled_date))}</div>
     `;
     container.appendChild(row);
