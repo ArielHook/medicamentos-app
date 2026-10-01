@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'v34';
+const APP_VERSION = 'v35';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -2500,21 +2500,38 @@ $('#btn-delete-expense').addEventListener('click', async () => {
 });
 
 // ----- Modal registrar pago -----
+function populateSettlementToOptions() {
+  const fromUser = myProfile?.is_admin ? $('#settlement-from-select').value : currentUser.id;
+  $('#settlement-to').innerHTML = usersWithModuleAccess('gastos')
+    .filter(p => p.user_id !== fromUser)
+    .map(p => `<option value="${p.user_id}">${escapeHtml(p.display_name)}</option>`).join('');
+}
+
 $('#btn-add-settlement').addEventListener('click', () => {
   $('#form-settlement').reset();
-  $('#settlement-from').value = currentUser.id;
-  $('#settlement-from-display').textContent = profileName(currentUser.id) + ' (vos)';
-  $('#settlement-to').innerHTML = usersWithModuleAccess('gastos')
-    .filter(p => p.user_id !== currentUser.id)
-    .map(p => `<option value="${p.user_id}">${escapeHtml(p.display_name)}</option>`).join('');
+  const eligible = usersWithModuleAccess('gastos');
+  if (myProfile?.is_admin) {
+    $('#settlement-from-display').classList.add('hidden');
+    $('#settlement-from-select').classList.remove('hidden');
+    $('#settlement-from-select').innerHTML = eligible.map(p =>
+      `<option value="${p.user_id}">${escapeHtml(p.display_name)}${p.user_id === currentUser.id ? ' (vos)' : ''}</option>`
+    ).join('');
+    $('#settlement-from-select').value = currentUser.id;
+  } else {
+    $('#settlement-from-display').classList.remove('hidden');
+    $('#settlement-from-select').classList.add('hidden');
+    $('#settlement-from-display').textContent = profileName(currentUser.id) + ' (vos)';
+  }
+  populateSettlementToOptions();
   $('#settlement-date').value = todayStr();
   $('#modal-settlement').classList.remove('hidden');
 });
+$('#settlement-from-select').addEventListener('change', populateSettlementToOptions);
 $('#btn-cancel-settlement').addEventListener('click', () => $('#modal-settlement').classList.add('hidden'));
 
 $('#form-settlement').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const fromUser = $('#settlement-from').value;
+  const fromUser = myProfile?.is_admin ? $('#settlement-from-select').value : currentUser.id;
   const toUser = $('#settlement-to').value;
   const amount = Number($('#settlement-amount').value);
   const settledDate = $('#settlement-date').value;
