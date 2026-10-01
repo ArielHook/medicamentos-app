@@ -1,4 +1,4 @@
-const CACHE_NAME = 'medicamentos-v35';
+const CACHE_NAME = 'medicamentos-v36';
 const ASSETS = [
   './',
   './index.html',
@@ -34,10 +34,12 @@ self.addEventListener('fetch', (event) => {
   if (request.url.includes('supabase.co')) {
     return;
   }
-  // Shell de la app: siempre intenta la red primero para no quedar
-  // pegado a una versión vieja; si no hay conexión, usa la caché.
+  // Shell de la app: siempre va a buscar al servidor de verdad
+  // (cache: 'no-store' evita que el propio navegador conteste con
+  // una copia guardada "fresca" sin siquiera avisarnos). Si no hay
+  // conexión, recién ahí usa la copia guardada.
   event.respondWith(
-    fetch(request)
+    fetch(request, { cache: 'no-store' })
       .then((response) => {
         const clone = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
