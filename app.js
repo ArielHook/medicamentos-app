@@ -1,11 +1,23 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'v36';
+const APP_VERSION = 'v37';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
     fetch: (url, options = {}) => fetch(url, { ...options, cache: 'no-store' }),
   },
+});
+
+// Red de seguridad: antes, un error de JS dentro de un botón "Guardar"
+// podía fallar en silencio (no pasaba nada, sin mensaje). Con esto,
+// cualquier error inesperado se muestra siempre con un aviso.
+window.addEventListener('error', (ev) => {
+  console.error('Error no controlado:', ev.error || ev.message);
+  alert('Ocurrió un error inesperado y no se pudo completar la acción.\n\nDetalle: ' + (ev.error?.message || ev.message || 'desconocido') + '\n\nProbá recargar la app (o cerrarla y volver a abrirla) e intentar de nuevo.');
+});
+window.addEventListener('unhandledrejection', (ev) => {
+  console.error('Promesa no controlada:', ev.reason);
+  alert('Ocurrió un error inesperado y no se pudo completar la acción.\n\nDetalle: ' + (ev.reason?.message || ev.reason || 'desconocido') + '\n\nProbá recargar la app (o cerrarla y volver a abrirla) e intentar de nuevo.');
 });
 
 let currentUser = null;
@@ -2531,17 +2543,30 @@ $('#btn-cancel-settlement').addEventListener('click', () => $('#modal-settlement
 
 $('#form-settlement').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const fromUser = myProfile?.is_admin ? $('#settlement-from-select').value : currentUser.id;
-  const toUser = $('#settlement-to').value;
-  const amount = Number($('#settlement-amount').value);
-  const settledDate = $('#settlement-date').value;
-  const notes = $('#settlement-notes').value.trim() || null;
-  if (fromUser === toUser) { alert('Elegí dos personas distintas.'); return; }
-  const { error } = await sb.from('settlements').insert({ from_user: fromUser, to_user: toUser, amount, settled_date: settledDate, notes });
-  if (error) { alert('Error: ' + error.message); return; }
-  logActivity('gastos', 'create', `Pago: ${profileName(fromUser)} → ${profileName(toUser)} (${money(amount)})`);
-  $('#modal-settlement').classList.add('hidden');
-  await loadGastos();
+  try {
+    const fromUser = myProfile?.is_admin ? $('#settlement-from-select').value : currentUser.id;
+    const toUser = $('#settlement-to').value;
+    // Admite "150000", "150.000" o "150,000" (separador de miles) además de decimales.
+    const rawAmount = $('#settlement-amount').value.toString().trim();
+    const amount = Number(rawAmount.replace(/\./g, '').replace(',', '.'));
+    const settledDate = $('#settlement-date').value;
+    const notes = $('#settlement-notes').value.trim() || null;
+
+    if (!fromUser) { alert('No se pudo determinar quién paga. Cerrá y volvé a abrir el formulario.'); return; }
+    if (!toUser) { alert('Elegí a quién se le paga.'); return; }
+    if (fromUser === toUser) { alert('Elegí dos personas distintas.'); return; }
+    if (!amount || amount <= 0 || Number.isNaN(amount)) { alert('Ingresá un monto válido, mayor a cero.'); return; }
+    if (!settledDate) { alert('Elegí una fecha.'); return; }
+
+    const { error } = await sb.from('settlements').insert({ from_user: fromUser, to_user: toUser, amount, settled_date: settledDate, notes });
+    if (error) { alert('No se pudo guardar el pago: ' + error.message); return; }
+    logActivity('gastos', 'create', `Pago: ${profileName(fromUser)} → ${profileName(toUser)} (${money(amount)})`);
+    $('#modal-settlement').classList.add('hidden');
+    await loadGastos();
+  } catch (err) {
+    console.error('Error registrando pago:', err);
+    alert('No se pudo registrar el pago por un error inesperado: ' + (err?.message || err));
+  }
 });
 
 // ===================== MÓDULO ADMIN =====================
