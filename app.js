@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'v37';
+const APP_VERSION = 'v38';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -749,6 +749,9 @@ function renderAlerts() {
 }
 
 function formatDate(d) {
+  // Las fechas "YYYY-MM-DD" (sin hora) se interpretan en hora local: con new Date('2026-10-17')
+  // JS las toma como UTC y en Argentina (UTC-3) se mostraban un día antes.
+  if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) d = new Date(d + 'T00:00:00');
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
@@ -1654,9 +1657,9 @@ function renderExpenses() {
     row.className = 'expense-row';
     let subline;
     if (exp.expense_type === 'cuenta_externa') {
-      subline = `${formatDate(new Date(exp.expense_date))} · 💳 ${escapeHtml(account ? accountLabel(account) : 'Cuenta eliminada')}${cat ? ' · ' + escapeHtml(cat.name) : ''}`;
+      subline = `${formatDate(exp.expense_date)} · 💳 ${escapeHtml(account ? accountLabel(account) : 'Cuenta eliminada')}${cat ? ' · ' + escapeHtml(cat.name) : ''}`;
     } else {
-      subline = `${formatDate(new Date(exp.expense_date))} · Pagó ${escapeHtml(profileName(exp.paid_by))} · Entre: ${splits.map(s => escapeHtml(profileName(s.user_id))).join(', ')}${cat ? ' · ' + escapeHtml(cat.name) : ''}`;
+      subline = `${formatDate(exp.expense_date)} · Pagó ${escapeHtml(profileName(exp.paid_by))} · Entre: ${splits.map(s => escapeHtml(profileName(s.user_id))).join(', ')}${cat ? ' · ' + escapeHtml(cat.name) : ''}`;
     }
     if (exp.is_fixed) subline += ' · <span class="fixed-badge">📌 Fijo</span>';
     row.innerHTML = `
@@ -1989,7 +1992,7 @@ function renderSettlements() {
     row.className = 'history-row';
     row.innerHTML = `
       <div><strong>${escapeHtml(profileName(s.from_user))}</strong> le pagó <strong>${money(s.amount)}</strong> a <strong>${escapeHtml(profileName(s.to_user))}</strong>${s.notes ? ' — ' + escapeHtml(s.notes) : ''}</div>
-      <div class="when">${formatDate(new Date(s.settled_date))}</div>
+      <div class="when">${formatDate(s.settled_date)}</div>
     `;
     container.appendChild(row);
   });
