@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'v38';
+const APP_VERSION = 'v39';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -160,7 +160,33 @@ function renderMenu() {
     return;
   }
   $('#no-access-msg').classList.add('hidden');
+  renderBottomNav(visible, isAdmin);
   switchModule(currentModule);
+}
+
+// BETA: barra de navegación inferior (reemplaza la lista de módulos del menú ☰)
+const NAV_ICONS = {
+  medicamentos: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 20.5a5 5 0 0 1-7-7l9-9a5 5 0 0 1 7 7z"/><path d="M8.5 8.5l7 7"/></svg>',
+  mercaderia: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.5 12h11l2-8H6"/></svg>',
+  gastos: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h13v4"/><path d="M3 7v11a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2z"/><circle cx="16.5" cy="14.5" r="1.2"/></svg>',
+  admin: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>',
+};
+const NAV_LABELS = { medicamentos: 'Remedios', mercaderia: 'Compras', gastos: 'Gastos', admin: 'Admin' };
+function renderBottomNav(visible, isAdmin) {
+  const nav = $('#bottom-nav');
+  if (!nav) return;
+  const keys = visible.map(m => m.key);
+  if (isAdmin) keys.push('admin');
+  nav.innerHTML = '';
+  keys.forEach(k => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.key = k;
+    b.innerHTML = `${NAV_ICONS[k] || ''}<span>${NAV_LABELS[k] || k}</span>`;
+    b.addEventListener('click', () => switchModule(k));
+    nav.appendChild(b);
+  });
+  nav.classList.toggle('hidden', keys.length === 0);
 }
 
 function toggleMenu() {
@@ -189,6 +215,7 @@ async function switchModule(key) {
   $$('.module-view').forEach(v => v.classList.add('hidden'));
   $(`#module-${key}`).classList.remove('hidden');
   $$('#menu-modules-list .menu-item').forEach(b => b.classList.toggle('active', b.dataset.key === key));
+  $$('#bottom-nav button').forEach(b => b.classList.toggle('active', b.dataset.key === key));
   const titles = { medicamentos: '💊 Medicamentos', mercaderia: '🛒 Mercadería', gastos: '💰 Gastos', admin: '⚙️ Administración' };
   $('#module-title').textContent = titles[key] || '';
   if (key === 'mercaderia') await loadMercaderia();
@@ -467,6 +494,7 @@ function renderItinerario() {
     container.innerHTML = '<p style="color:#6b7280">Todavía no cargaste medicamentos. Andá a la pestaña "Medicamentos" para agregar el primero.</p>';
     return;
   }
+  renderItinerarioResumen();
   // Agrupar schedule_items por time_label, usando el orden guardado
   // por el usuario (arrastrando tarjetas), no el orden de carga.
   const groups = {};
@@ -489,6 +517,12 @@ function renderItinerario() {
         <button type="button" class="btn-move" data-label="${escapeHtml(label)}" data-dir="1" ${idx === order.length - 1 ? 'disabled' : ''}>▼</button>
       </span>
     `;
+    const gTotal = items.filter(si => medsCache.some(m => m.id === si.medication_id)).length;
+    const gDone = items.filter(si => doseLogToday.has(si.id) && medsCache.some(m => m.id === si.medication_id)).length;
+    const gStatus = document.createElement('span');
+    gStatus.className = 'group-status ' + (gTotal > 0 && gDone === gTotal ? 'done' : 'pending');
+    gStatus.textContent = gTotal > 0 && gDone === gTotal ? 'completo' : `${gDone}/${gTotal}`;
+    header.firstElementChild.appendChild(gStatus);
     div.appendChild(header);
     items.forEach(si => {
       const med = medsCache.find(m => m.id === si.medication_id);
@@ -518,6 +552,39 @@ function renderItinerario() {
   });
 }
 
+// BETA: tarjeta de resumen (anillo de progreso + stock bajo)
+function renderItinerarioResumen() {
+  let box = $('#itinerario-resumen');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'itinerario-resumen';
+    box.className = 'resumen-row';
+    $('#itinerario-list').parentNode.insertBefore(box, $('#itinerario-list'));
+  }
+  const valid = scheduleCache.filter(si => medsCache.some(m => m.id === si.medication_id));
+  const total = valid.length;
+  const done = valid.filter(si => doseLogToday.has(si.id)).length;
+  const pct = total ? done / total : 0;
+  const C = 2 * Math.PI * 22;
+  const lowCount = medsCache.filter(med => {
+    const s = stockCache.find(x => x.medication_id === med.id);
+    const days = daysRemainingFor(med.id);
+    return s && days !== null && days <= Number(s.low_stock_days_threshold);
+  }).length;
+  box.innerHTML = `
+    <div class="resumen-card">
+      <svg width="54" height="54" viewBox="0 0 54 54" aria-hidden="true">
+        <circle cx="27" cy="27" r="22" fill="none" stroke="var(--surface-2)" stroke-width="6"/>
+        <circle cx="27" cy="27" r="22" fill="none" stroke="var(--navy)" stroke-width="6" stroke-linecap="round"
+          stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - pct)).toFixed(1)}" transform="rotate(-90 27 27)"/>
+      </svg>
+      <div><div class="resumen-big">${done} de ${total}</div><div class="resumen-sub">tomas de hoy</div></div>
+    </div>
+    <div class="resumen-card ${lowCount ? 'warn' : ''}">
+      <div><div class="resumen-big">${lowCount}</div><div class="resumen-sub">${lowCount === 1 ? 'con stock bajo' : 'con stock bajo'}</div></div>
+    </div>`;
+}
+
 async function toggleDose(scheduleItemId, btn) {
   // El itinerario es de referencia: marcar/desmarcar una toma queda
   // registrado como historial, pero NO afecta el stock. El stock se
@@ -530,6 +597,7 @@ async function toggleDose(scheduleItemId, btn) {
     doseLogToday.delete(scheduleItemId);
     btn.classList.remove('checked');
     btn.textContent = '';
+    renderItinerarioResumen();
   } else {
     await sb.from('dose_log').insert({
       schedule_item_id: scheduleItemId,
@@ -539,6 +607,7 @@ async function toggleDose(scheduleItemId, btn) {
     doseLogToday.add(scheduleItemId);
     btn.classList.add('checked');
     btn.textContent = '✓';
+    renderItinerarioResumen();
   }
 }
 
@@ -616,6 +685,8 @@ function renderStock() {
           ${zeroDate ? `<div class="zero-date">${isLow ? '⚠️ ' : ''}Se agota: ${formatDate(zeroDate)} (${days} días)</div>` : `<div class="meta">Sin horarios cargados</div>`}
         </div>
       </div>
+      ${days !== null ? `<div class="stock-bar" aria-hidden="true"><div class="stock-bar-fill ${isLow ? 'low' : ''}" style="width:${Math.max(4, Math.min(100, Math.round(days / 30 * 100)))}%"></div></div>
+      <div class="stock-bar-label">${Math.max(0, days)} días de stock</div>` : ''}
     `;
     container.appendChild(card);
   });
@@ -1666,7 +1737,7 @@ function renderExpenses() {
       <div class="top-line">
         <span>${escapeHtml(exp.description)}</span>
         <span class="expense-row-right">
-          <span>$${Number(exp.amount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
+          <span class="expense-amount">$${Number(exp.amount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
           ${writeOk ? `
           <span class="expense-menu-wrap">
             <button type="button" class="btn-dots" data-id="${exp.id}">⋮</button>
@@ -1910,24 +1981,39 @@ function renderBalances() {
   const net = computeNetBalances();
   const eligible = usersWithModuleAccess('gastos');
   const container = $('#balances-summary');
-  container.innerHTML = '<h3 class="section-title">Balance de cada uno</h3><div class="balance-cards-grid"></div>';
-  const grid = container.querySelector('.balance-cards-grid');
+
+  // BETA: gasto compartido del mes
+  const monthKey = todayStr().slice(0, 7);
+  const monthExp = expensesCache.filter(exp => exp.expense_type !== 'cuenta_externa' && String(exp.expense_date).startsWith(monthKey));
+  const monthTotal = monthExp.reduce((sum, exp) => sum + Number(exp.amount), 0);
+  const monthName = capitalize(new Date().toLocaleDateString('es-AR', { month: 'long' }));
+  container.innerHTML = `
+    <div class="month-card" id="month-card" role="button" tabindex="0" aria-label="Ver los gastos del mes">
+      <div class="month-label">Gasto compartido · ${escapeHtml(monthName)} <span class="month-more">Ver detalle ›</span></div>
+      <div class="month-amount">${money(monthTotal)}</div>
+      <div class="month-sub">${monthExp.length} ${monthExp.length === 1 ? 'gasto' : 'gastos'}${monthExp.length ? ' · promedio ' + money(monthTotal / monthExp.length) : ''}</div>
+    </div>
+    <h3 class="section-title">Balance de cada uno</h3><div class="balance-list"></div>`;
+  const monthCard = container.querySelector('#month-card');
+  monthCard.addEventListener('click', () => openMonthSheet(monthKey));
+  monthCard.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMonthSheet(monthKey); } });
+  const list = container.querySelector('.balance-list');
+  const maxAbs = Math.max(1, ...eligible.map(p => Math.abs(net[p.user_id] || 0)));
   eligible.forEach(p => {
     const amount = Math.round((net[p.user_id] || 0) * 100) / 100;
     const isPositive = amount > 0.01;
     const isNegative = amount < -0.01;
-    const card = document.createElement('div');
-    card.className = 'balance-card-v2' + (isPositive ? ' positive' : isNegative ? ' negative' : ' neutral');
     const status = isPositive ? 'a favor' : isNegative ? 'pendiente' : 'al día';
-    const amountText = (isPositive || isNegative) ? money(Math.abs(amount)) : '—';
-    const initial = p.display_name.trim().charAt(0).toUpperCase();
-    card.innerHTML = `
-      <div class="balance-avatar">${escapeHtml(initial)}</div>
-      <div class="balance-name">${escapeHtml(p.display_name)}</div>
-      <div class="balance-amount">${amountText}</div>
-      <div class="balance-status">${status}</div>
-    `;
-    grid.appendChild(card);
+    const pct = Math.round(Math.abs(amount) / maxAbs * 50);
+    const row = document.createElement('div');
+    row.className = 'balance-row ' + (isPositive ? 'positive' : isNegative ? 'negative' : 'neutral');
+    row.innerHTML = `
+      <div class="balance-row-top">
+        <span class="balance-row-name">${escapeHtml(p.display_name)} <small>${status}</small></span>
+        <span class="balance-row-amount">${isPositive ? '+ ' : isNegative ? '- ' : ''}${(isPositive || isNegative) ? money(Math.abs(amount)) : '—'}</span>
+      </div>
+      <div class="balance-track"><div class="balance-fill" style="width:${pct}%"></div></div>`;
+    list.appendChild(row);
   });
 
   const debts = simplifyDebts(net);
@@ -1944,10 +2030,72 @@ function renderBalances() {
     debts.forEach(d => {
       const row = document.createElement('div');
       row.className = 'debt-row';
-      row.innerHTML = `<strong>${escapeHtml(profileName(d.from))}</strong> → <strong>${escapeHtml(profileName(d.to))}</strong>: <strong>${money(d.amount)}</strong>`;
+      const canPay = canWrite('gastos') && (myProfile?.is_admin || d.from === currentUser.id);
+      row.innerHTML = `<span class="debt-text"><strong>${escapeHtml(profileName(d.from))}</strong> → <strong>${escapeHtml(profileName(d.to))}</strong></span><strong class="debt-amount">${money(d.amount)}</strong>${canPay ? '<button type="button" class="btn-pay">Pagar</button>' : ''}`;
+      const btn = row.querySelector('.btn-pay');
+      if (btn) btn.addEventListener('click', () => payDebt(d));
       container.appendChild(row);
     });
   }
+}
+
+// BETA: ventana desde abajo con los gastos compartidos de un mes
+function shiftMonthKey(key, delta) {
+  const [y, m] = key.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function openMonthSheet(key) {
+  let sheet = $('#modal-month');
+  if (!sheet) {
+    sheet = document.createElement('div');
+    sheet.id = 'modal-month';
+    sheet.className = 'modal hidden';
+    sheet.innerHTML = '<div class="modal-content month-sheet"></div>';
+    sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.classList.add('hidden'); });
+    document.body.appendChild(sheet);
+  }
+  const [y, m] = key.split('-').map(Number);
+  const label = capitalize(new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }));
+  const items = expensesCache
+    .filter(exp => exp.expense_type !== 'cuenta_externa' && String(exp.expense_date).startsWith(key))
+    .sort((p, q) => String(q.expense_date).localeCompare(String(p.expense_date)));
+  const total = items.reduce((sum, exp) => sum + Number(exp.amount), 0);
+  const rows = items.length === 0
+    ? '<p class="hint" style="text-align:center;padding:18px 0;">No hay gastos compartidos en este mes.</p>'
+    : items.map(exp => {
+        const cat = categoriesCache.find(c => c.id === exp.category_id);
+        return `<div class="month-item">
+          <div class="month-item-main"><div class="month-item-title">${escapeHtml(exp.description)}</div>
+          <div class="month-item-meta">${formatDate(exp.expense_date)} · Pagó ${escapeHtml(profileName(exp.paid_by))}${cat ? ' · ' + escapeHtml(cat.name) : ''}</div></div>
+          <div class="month-item-amount">${money(exp.amount)}</div></div>`;
+      }).join('');
+  const box = sheet.querySelector('.month-sheet');
+  box.innerHTML = `
+    <div class="month-sheet-nav">
+      <button type="button" class="btn-icon-small" id="month-prev" aria-label="Mes anterior">‹</button>
+      <div class="month-sheet-title">${escapeHtml(label)}</div>
+      <button type="button" class="btn-icon-small" id="month-next" aria-label="Mes siguiente">›</button>
+    </div>
+    <div class="month-sheet-total">${money(total)}<small>${items.length} ${items.length === 1 ? 'gasto' : 'gastos'}</small></div>
+    <div class="month-sheet-list">${rows}</div>
+    <button type="button" class="btn-secondary btn-block" id="month-close" style="margin-top:12px;">Cerrar</button>`;
+  box.querySelector('#month-prev').addEventListener('click', () => openMonthSheet(shiftMonthKey(key, -1)));
+  box.querySelector('#month-next').addEventListener('click', () => openMonthSheet(shiftMonthKey(key, 1)));
+  box.querySelector('#month-close').addEventListener('click', () => sheet.classList.add('hidden'));
+  sheet.classList.remove('hidden');
+}
+
+// BETA: abre "Registrar pago" ya completado con el ajuste sugerido
+function payDebt(d) {
+  $('#btn-add-settlement').click();
+  if (myProfile?.is_admin) {
+    $('#settlement-from-select').value = d.from;
+    populateSettlementToOptions();
+  }
+  $('#settlement-to').value = d.to;
+  $('#settlement-amount').value = Math.round(d.amount * 100) / 100;
 }
 
 function renderExternalBalances() {
@@ -2165,33 +2313,153 @@ function templateAccountLabel(t) {
   return acc ? accountLabel(acc) : '—';
 }
 
+// ===== BETA · Gastos fijos: estado del mes, vencimientos y carga masiva =====
+function monthKeyNow() { return todayStr().slice(0, 7); }
+function byDateDesc(x, y) { return String(y.expense_date).localeCompare(String(x.expense_date)); }
+
+// Un gasto cuenta como "de esta plantilla" si está vinculado a ella; los gastos fijos
+// viejos (sin vínculo) se reconocen por tener el mismo nombre.
+function templateMatchesExpense(t, exp) {
+  if (exp.template_id) return exp.template_id === t.id;
+  return !!exp.is_fixed && String(exp.description || '').trim().toLowerCase() === t.name.trim().toLowerCase();
+}
+function templatePaidThisMonth(t) {
+  const key = monthKeyNow();
+  return expensesCache.filter(e => String(e.expense_date).startsWith(key) && templateMatchesExpense(t, e)).sort(byDateDesc)[0] || null;
+}
+// Monto sugerido: el del último mes en que se pagó; si nunca se pagó, el habitual.
+function templateSuggestedAmount(t) {
+  const last = expensesCache.filter(e => templateMatchesExpense(t, e)).sort(byDateDesc)[0];
+  if (last) return Number(last.amount);
+  return t.default_amount ? Number(t.default_amount) : null;
+}
+function templateDueDate(t) {
+  if (!t.due_day) return null;
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return new Date(now.getFullYear(), now.getMonth(), Math.min(Number(t.due_day), daysInMonth));
+}
+function monthIndex(dateStr) { const [y, m] = String(dateStr).slice(0, 7).split('-').map(Number); return y * 12 + m - 1; }
+function periodLabel(t) {
+  return { 2: 'Bimestral', 3: 'Trimestral', 6: 'Semestral', 12: 'Anual' }[t.period_months] || '';
+}
+// Si se pagó dentro de su período (ej. hace 1 mes en uno bimestral), este mes no toca.
+function templateSkipInfo(t) {
+  const period = t.period_months || 1;
+  if (period <= 1) return null;
+  const last = expensesCache.filter(e => templateMatchesExpense(t, e)).sort(byDateDesc)[0];
+  if (!last) return null;
+  const diff = monthIndex(todayStr()) - monthIndex(last.expense_date);
+  if (diff <= 0 || diff >= period) return null;
+  const next = new Date(Math.floor((monthIndex(last.expense_date) + period) / 12), (monthIndex(last.expense_date) + period) % 12, 1);
+  return { last, next };
+}
+function templateIsPending(t) { return !templatePaidThisMonth(t) && !templateSkipInfo(t); }
+function templateStatus(t) {
+  const paid = templatePaidThisMonth(t);
+  if (paid) return { state: 'paid', expense: paid, rank: 3 };
+  const skip = templateSkipInfo(t);
+  if (skip) return { state: 'skip', ...skip, rank: 4 };
+  const due = templateDueDate(t);
+  if (!due) return { state: 'pending', due: null, days: null, rank: 2 };
+  const days = daysBetween(new Date(), due);
+  if (days < 0) return { state: 'overdue', due, days, rank: 0 };
+  if (days <= 3) return { state: 'soon', due, days, rank: 1 };
+  return { state: 'pending', due, days, rank: 2 };
+}
+function statusText(st) {
+  if (st.state === 'skip') return 'No toca este mes · próximo en ' + capitalize(st.next.toLocaleDateString('es-AR', { month: 'long' }));
+  if (st.state === 'paid') return `Pagado · ${formatDate(st.expense.expense_date)} · ${money(st.expense.amount)}`;
+  if (st.state === 'overdue') return st.days === -1 ? 'Venció ayer' : `Venció hace ${-st.days} días`;
+  if (st.state === 'soon') return st.days === 0 ? 'Vence hoy' : st.days === 1 ? 'Vence mañana' : `Vence en ${st.days} días`;
+  if (st.due) return `Vence el ${st.due.getDate()}`;
+  return 'Pendiente';
+}
+
+function renderFijosAlert() {
+  let box = $('#fijos-alert');
+  if (!box) {
+    box = document.createElement('button');
+    box.type = 'button';
+    box.id = 'fijos-alert';
+    box.className = 'fijos-alert hidden';
+    box.addEventListener('click', () => { const tab = document.querySelector('#module-gastos .tab[data-target="gtab-fijos"]'); if (tab) tab.click(); });
+    $('#module-gastos').insertBefore(box, $('#module-gastos .tabs'));
+  }
+  const states = templatesCache.map(templateStatus);
+  const overdue = states.filter(s => s.state === 'overdue').length;
+  const soon = states.filter(s => s.state === 'soon').length;
+  if (!overdue && !soon) { box.classList.add('hidden'); return; }
+  const parts = [];
+  if (overdue) parts.push(`${overdue} ${overdue === 1 ? 'gasto fijo vencido' : 'gastos fijos vencidos'}`);
+  if (soon) parts.push(`${soon} ${soon === 1 ? 'vence' : 'vencen'} en los próximos 3 días`);
+  box.textContent = '⏰ ' + parts.join(' · ') + '  — Ver';
+  box.classList.toggle('overdue', overdue > 0);
+  box.classList.remove('hidden');
+}
+
 function renderTemplates() {
   const container = $('#templates-list');
   container.innerHTML = '';
+  renderFijosAlert();
   const writeOk = canWrite('gastos');
   if (templatesCache.length === 0) {
     container.innerHTML = '<p class="hint">Todavía no cargaste ningún gasto fijo.</p>';
     return;
   }
-  templatesCache.forEach(t => {
+  const monthName = capitalize(new Date().toLocaleDateString('es-AR', { month: 'long' }));
+  const items = templatesCache.map(t => ({ t, st: templateStatus(t) }))
+    .sort((p, q) => p.st.rank - q.st.rank || (p.st.due && q.st.due ? p.st.due - q.st.due : 0) || p.t.name.localeCompare(q.t.name));
+  const dueItems = items.filter(i => i.st.state !== 'skip');
+  const paidCount = dueItems.filter(i => i.st.state === 'paid').length;
+  const unpaid = dueItems.filter(i => i.st.state !== 'paid');
+  const missing = unpaid.reduce((sum, i) => sum + (templateSuggestedAmount(i.t) || 0), 0);
+  const noAmount = unpaid.filter(i => !templateSuggestedAmount(i.t)).length;
+
+  const summary = document.createElement('div');
+  summary.className = 'fijos-summary';
+  summary.innerHTML = `
+    <div class="fijos-summary-top"><span class="fijos-summary-big">${paidCount} de ${dueItems.length}</span><span class="fijos-summary-label">pagados en ${escapeHtml(monthName)}</span></div>
+    <div class="fijos-progress"><div style="width:${Math.round(paidCount / Math.max(dueItems.length, 1) * 100)}%"></div></div>
+    <div class="fijos-summary-sub">${unpaid.length === 0 ? 'Todo al día este mes' : `Faltan ${money(missing)}${noAmount ? ` (+ ${noAmount} sin monto)` : ''}`}</div>`;
+  container.appendChild(summary);
+
+  if (writeOk && unpaid.length > 0) {
+    const batch = document.createElement('button');
+    batch.type = 'button';
+    batch.className = 'btn-primary btn-block';
+    batch.style.marginTop = '0';
+    batch.textContent = `Cargar los fijos de ${monthName} (${unpaid.length})`;
+    batch.addEventListener('click', openBatchFixedModal);
+    container.appendChild(batch);
+  }
+
+  items.forEach(({ t, st }) => {
     const cat = categoriesCache.find(c => c.id === t.category_id);
     const row = document.createElement('div');
-    row.className = 'category-row';
+    row.className = 'fijo-card ' + st.state;
     const detail = t.expense_type === 'cuenta_externa'
       ? `💳 ${templateAccountLabel(t)}`
       : `Entre: ${(t.default_participants || []).map(uid => profileName(uid)).join(', ') || '—'}`;
+    const suggested = templateSuggestedAmount(t);
     row.innerHTML = `
-      <div>
-        <div class="label">📌 ${escapeHtml(t.name)}${t.default_amount ? ` — $${Number(t.default_amount).toLocaleString('es-AR')}` : ''}</div>
-        <div class="shop-meta">${cat ? escapeHtml(cat.name) + ' · ' : ''}${detail}</div>
+      <div class="fijo-main">
+        <div class="fijo-title">${escapeHtml(t.name)}${periodLabel(t) ? ` <span class="fijo-period">${periodLabel(t)}</span>` : ''}</div>
+        <div class="fijo-status ${st.state}">${escapeHtml(statusText(st))}</div>
+        <div class="shop-meta">${cat ? escapeHtml(cat.name) + ' · ' : ''}${detail}${suggested && st.state !== 'paid' ? ` · ~${money(suggested)}` : ''}</div>
       </div>
-      ${writeOk ? `
-      <span style="display:flex;gap:4px;">
-        <button type="button" class="btn-icon-xs" data-edit-tpl="${t.id}" title="Editar">✎</button>
-        <button type="button" class="btn-icon-xs danger" data-del-tpl="${t.id}" title="Eliminar">✕</button>
-      </span>` : ''}
-    `;
+      <div class="fijo-actions">
+        ${writeOk && st.state !== 'paid' ? `<button type="button" class="${st.state === 'skip' ? 'btn-secondary' : 'btn-pay'}" data-load-tpl>Cargar</button>` : ''}
+        ${writeOk ? `<button type="button" class="btn-icon-xs" data-edit-tpl="${t.id}" title="Editar">✎</button>
+        <button type="button" class="btn-icon-xs danger" data-del-tpl="${t.id}" title="Eliminar">✕</button>` : ''}
+      </div>`;
     if (writeOk) {
+      const load = row.querySelector('[data-load-tpl]');
+      if (load) load.addEventListener('click', () => {
+        openExpenseModal(null);
+        applyTemplateToExpenseForm(t);
+        if (suggested) $('#expense-amount').value = suggested;
+      });
       row.querySelector('[data-edit-tpl]').addEventListener('click', () => openTemplateModal(t.id));
       row.querySelector('[data-del-tpl]').addEventListener('click', async () => {
         if (!confirm(`¿Eliminar el gasto fijo "${t.name}"?`)) return;
@@ -2201,6 +2469,114 @@ function renderTemplates() {
     }
     container.appendChild(row);
   });
+}
+
+// Carga todos los fijos que faltan del mes en un solo paso (con monto y fecha editables)
+function openBatchFixedModal() {
+  const pending = templatesCache.filter(templateIsPending);
+  if (pending.length === 0) { alert('Ya están cargados todos los gastos fijos de este mes.'); return; }
+  let modal = $('#modal-batch-fixed');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-batch-fixed';
+    modal.className = 'modal hidden';
+    modal.innerHTML = '<div class="modal-content"></div>';
+    document.body.appendChild(modal);
+  }
+  const monthName = capitalize(new Date().toLocaleDateString('es-AR', { month: 'long' }));
+  const box = modal.querySelector('.modal-content');
+  const rows = pending.map(t => {
+    const sug = templateSuggestedAmount(t);
+    const due = templateDueDate(t);
+    const dateVal = due && monthKeyNow() === (due.getFullYear() + '-' + String(due.getMonth() + 1).padStart(2, '0'))
+      ? `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}` : todayStr();
+    const kind = t.expense_type === 'cuenta_externa' ? `💳 ${templateAccountLabel(t)}` : `Entre: ${(t.default_participants || []).map(profileName).join(', ') || '—'}`;
+    return `<div class="batch-row" data-tid="${t.id}">
+      <label class="batch-check"><input type="checkbox" checked /> <span>${escapeHtml(t.name)}</span></label>
+      <div class="batch-fields">
+        <input type="number" class="batch-amount" min="0" step="0.01" value="${sug || ''}" placeholder="Monto" aria-label="Monto de ${escapeHtml(t.name)}" />
+        <input type="date" class="batch-date" value="${dateVal}" aria-label="Fecha de ${escapeHtml(t.name)}" />
+      </div>
+      <div class="batch-meta">${kind}${sug ? '' : ' · completá el monto'}</div>
+    </div>`;
+  }).join('');
+  const payerSelect = myProfile?.is_admin
+    ? `<label>¿Quién pagó los compartidos?</label><select id="batch-paid-by">${usersWithModuleAccess('gastos').map(p => `<option value="${p.user_id}" ${p.user_id === currentUser.id ? 'selected' : ''}>${escapeHtml(p.display_name)}${p.user_id === currentUser.id ? ' (vos)' : ''}</option>`).join('')}</select>` : '';
+  box.innerHTML = `
+    <h2>Cargar fijos de ${escapeHtml(monthName)}</h2>
+    <p class="hint">Se usa el monto del último mes. Cambiá los que varían y destildá los que todavía no querés cargar.</p>
+    <div class="batch-list">${rows}</div>
+    ${payerSelect}
+    <div class="batch-total" id="batch-total"></div>
+    <div class="modal-actions">
+      <div class="spacer"></div>
+      <button type="button" class="btn-secondary" id="batch-cancel">Cancelar</button>
+      <button type="button" class="btn-primary" id="batch-confirm">Cargar</button>
+    </div>`;
+  const refresh = () => {
+    const sel = [...box.querySelectorAll('.batch-row')].filter(r => r.querySelector('input[type=checkbox]').checked);
+    const total = sel.reduce((sum, r) => sum + (Number(r.querySelector('.batch-amount').value) || 0), 0);
+    $('#batch-total').textContent = `${sel.length} ${sel.length === 1 ? 'gasto' : 'gastos'} · ${money(total)}`;
+    $('#batch-confirm').textContent = sel.length ? `Cargar ${sel.length}` : 'Cargar';
+  };
+  box.addEventListener('input', refresh);
+  box.addEventListener('change', refresh);
+  $('#batch-cancel').addEventListener('click', () => modal.classList.add('hidden'));
+  $('#batch-confirm').addEventListener('click', () => submitBatchFixed(pending, modal));
+  refresh();
+  modal.classList.remove('hidden');
+}
+
+async function submitBatchFixed(pending, modal) {
+  const jobs = [];
+  for (const row of modal.querySelectorAll('.batch-row')) {
+    if (!row.querySelector('input[type=checkbox]').checked) continue;
+    const t = pending.find(x => x.id === row.dataset.tid);
+    const amount = Number(row.querySelector('.batch-amount').value);
+    const date = row.querySelector('.batch-date').value;
+    if (!(amount > 0)) { alert(`Falta el monto de "${t.name}".`); return; }
+    if (!date) { alert(`Falta la fecha de "${t.name}".`); return; }
+    if (t.expense_type !== 'cuenta_externa' && !(t.default_participants || []).length) {
+      alert(`"${t.name}" no tiene personas con quienes repartirlo. Editalo en Gastos fijos o destildalo.`); return;
+    }
+    jobs.push({ t, amount, date });
+  }
+  if (jobs.length === 0) { alert('Elegí al menos un gasto.'); return; }
+  const paidBy = myProfile?.is_admin ? $('#batch-paid-by').value : currentUser.id;
+  const confirmBtn = $('#batch-confirm');
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = 'Cargando...';
+  const failed = [];
+  for (const { t, amount, date } of jobs) {
+    try {
+      const externa = t.expense_type === 'cuenta_externa';
+      const payload = {
+        description: t.name, amount, expense_date: date, category_id: t.category_id, notes: null,
+        is_fixed: true, template_id: t.id, created_by: currentUser.id,
+        expense_type: externa ? 'cuenta_externa' : 'compartido',
+        payment_account_id: externa ? t.payment_account_id : null,
+        paid_by: externa ? null : paidBy,
+      };
+      const { data, error } = await sb.from('expenses').insert(payload).select().single();
+      if (error) throw new Error(error.message);
+      if (!externa) {
+        const parts = t.default_participants;
+        const share = Math.round((amount / parts.length) * 100) / 100;
+        const splits = parts.map((uid, idx) => ({
+          expense_id: data.id, user_id: uid,
+          share_amount: idx === parts.length - 1 ? Math.round((amount - share * (parts.length - 1)) * 100) / 100 : share,
+        }));
+        const { error: splitErr } = await sb.from('expense_splits').insert(splits);
+        if (splitErr) { await sb.from('expenses').delete().eq('id', data.id); throw new Error(splitErr.message); }
+      }
+      logActivity('gastos', 'create', `Gasto fijo: ${t.name} (${money(amount)})`, externa ? `Carga masiva · Cuenta externa: ${templateAccountLabel(t)}` : `Carga masiva · Pagó: ${profileName(paidBy)}. Entre: ${t.default_participants.map(profileName).join(', ')}`);
+    } catch (err) {
+      failed.push(`${t.name}: ${err.message}`);
+    }
+  }
+  modal.classList.add('hidden');
+  await loadGastos();
+  if (failed.length) alert('No se pudieron cargar:\n' + failed.join('\n'));
 }
 
 $('#btn-add-template').addEventListener('click', () => openTemplateModal(null));
@@ -2249,6 +2625,8 @@ function openTemplateModal(templateId) {
     $('#template-id').value = t.id;
     $('#template-name').value = t.name;
     $('#template-amount').value = t.default_amount || '';
+    $('#template-due-day').value = t.due_day || '';
+    $('#template-period').value = String(t.period_months || 1);
     $('#template-category').value = t.category_id || '';
     if (t.expense_type === 'cuenta_externa') $('#template-account').value = t.payment_account_id || '';
     $('#btn-delete-template').classList.remove('hidden');
@@ -2268,7 +2646,10 @@ $('#form-template').addEventListener('submit', async (e) => {
   const expenseType = $('#template-type-toggle .segmented-btn.active')?.dataset.type || 'compartido';
   if (!name) return;
 
-  const payload = { name, default_amount: amount, category_id: categoryId, expense_type: expenseType };
+  const periodMonths = Number($('#template-period').value) || 1;
+  const dueDayRaw = $('#template-due-day').value;
+  const dueDay = dueDayRaw ? Math.min(31, Math.max(1, Math.round(Number(dueDayRaw)))) : null;
+  const payload = { name, default_amount: amount, category_id: categoryId, expense_type: expenseType, due_day: dueDay, period_months: periodMonths };
   if (expenseType === 'cuenta_externa') {
     const accountId = $('#template-account').value;
     if (!accountId) { alert('Elegí una cuenta.'); return; }
@@ -2320,6 +2701,7 @@ function applyTemplateToExpenseForm(t) {
   if (t.default_amount) $('#expense-amount').value = t.default_amount;
   $('#expense-category').value = t.category_id || '';
   $('#expense-is-fixed').value = '1';
+  $('#expense-template-id').value = t.id;
 
   $$('#expense-type-toggle .segmented-btn').forEach(b => b.classList.toggle('active', b.dataset.type === t.expense_type));
   const isExterna = t.expense_type === 'cuenta_externa';
@@ -2337,9 +2719,23 @@ function applyTemplateToExpenseForm(t) {
   $('#expense-amount').focus();
 }
 
+function populateExpenseTemplateSelect() {
+  const sel = $('#expense-template-id');
+  sel.innerHTML = '<option value="">Ninguno (gasto común)</option>' +
+    templatesCache.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+}
+$('#expense-template-id').addEventListener('change', () => {
+  const id = $('#expense-template-id').value;
+  $('#expense-is-fixed').value = id ? '1' : '';
+  const t = templatesCache.find(x => x.id === id);
+  if (t && !$('#expense-description').value.trim()) $('#expense-description').value = t.name;
+});
+
 function openExpenseModal(expenseId) {
+  populateExpenseTemplateSelect();
   $('#form-expense').reset();
   $('#expense-is-fixed').value = '';
+  $('#expense-template-id').value = '';
   $('#btn-delete-expense').classList.add('hidden');
   $('#expense-date').value = todayStr();
 
@@ -2405,6 +2801,7 @@ function openExpenseModal(expenseId) {
     $('#expense-category').value = exp.category_id || '';
     $('#expense-notes').value = exp.notes || '';
     $('#expense-is-fixed').value = exp.is_fixed ? '1' : '';
+    $('#expense-template-id').value = exp.template_id || '';
     $('#btn-delete-expense').classList.remove('hidden');
 
     if (exp.expense_type === 'cuenta_externa') {
@@ -2435,7 +2832,8 @@ $('#form-expense').addEventListener('submit', async (e) => {
   const expenseDate = $('#expense-date').value;
   const categoryId = $('#expense-category').value || null;
   const notes = $('#expense-notes').value.trim() || null;
-  const isFixed = $('#expense-is-fixed').value === '1';
+  const templateId = $('#expense-template-id').value || null;
+  const isFixed = !!templateId || $('#expense-is-fixed').value === '1';
   const expenseType = currentExpenseType();
 
   const before = expenseId ? expensesCache.find(x => x.id === expenseId) : null;
@@ -2447,7 +2845,7 @@ $('#form-expense').addEventListener('submit', async (e) => {
       if (!accountId) { alert('Elegí una cuenta (o cargá una primero en la pestaña "Cuentas").'); return; }
 
       const payload = {
-        description, amount, expense_date: expenseDate, category_id: categoryId, notes, is_fixed: isFixed,
+        description, amount, expense_date: expenseDate, category_id: categoryId, notes, is_fixed: isFixed, template_id: templateId,
         expense_type: 'cuenta_externa', payment_account_id: accountId,
         paid_by: null, created_by: currentUser.id,
       };
@@ -2470,7 +2868,7 @@ $('#form-expense').addEventListener('submit', async (e) => {
       if (participants.length === 0) { alert('Elegí al menos un participante.'); return; }
 
       const payload = {
-        description, amount, expense_date: expenseDate, category_id: categoryId, notes, is_fixed: isFixed,
+        description, amount, expense_date: expenseDate, category_id: categoryId, notes, is_fixed: isFixed, template_id: templateId,
         expense_type: 'compartido', payment_account_id: null,
         paid_by: paidBy, created_by: currentUser.id,
       };

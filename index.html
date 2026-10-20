@@ -4,10 +4,12 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Medicamentos</title>
-<meta name="theme-color" content="#1F3864" />
+<meta name="theme-color" content="#0D1422" />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="icon" href="icons/icon-192.png" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -33,7 +35,7 @@
   <!-- APP PRINCIPAL -->
   <section id="view-app" class="view hidden">
     <header class="topbar">
-      <h1 id="module-title">💊 Medicamentos</h1>
+      <h1><span id="module-title">💊 Medicamentos</span></h1>
       <div class="menu-wrap">
         <button id="btn-menu" class="btn-menu-toggle" title="Menú">☰</button>
         <div id="menu-dropdown" class="menu-dropdown hidden">
@@ -389,6 +391,8 @@
       <label>Categoría</label>
       <select id="expense-category"></select>
       <input type="hidden" id="expense-is-fixed" />
+      <label>Gasto fijo (opcional)</label>
+      <select id="expense-template-id"></select>
 
       <label>¿Cómo se pagó?</label>
       <div class="segmented" id="expense-type-toggle">
@@ -453,6 +457,16 @@
       <input type="text" id="template-name" placeholder="Ej: Alquiler, Luz, Internet..." required />
       <label>Monto habitual (opcional — si varía cada mes, dejalo vacío)</label>
       <input type="number" id="template-amount" min="0" step="0.01" />
+      <label>Frecuencia</label>
+      <select id="template-period">
+        <option value="1">Todos los meses</option>
+        <option value="2">Cada 2 meses (bimestral)</option>
+        <option value="3">Cada 3 meses (trimestral)</option>
+        <option value="6">Cada 6 meses (semestral)</option>
+        <option value="12">Una vez al año</option>
+      </select>
+      <label>Día del mes en que vence (opcional)</label>
+      <input type="number" id="template-due-day" min="1" max="31" step="1" placeholder="Ej: 10" />
       <label>Categoría</label>
       <select id="template-category"></select>
 
@@ -591,6 +605,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
+<nav id="bottom-nav" class="bottom-nav hidden" aria-label="Módulos"></nav>
 <script src="app.js"></script>
 </body>
 </html>
