@@ -1355,3 +1355,34 @@ body:has(#view-app.hidden) .bottom-nav { display: none; }
 .month-item-title { font-weight: 700; font-size: 14px; }
 .month-item-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .month-item-amount { font-weight: 800; font-size: 15px; white-space: nowrap; }
+
+/* ===== BETA · Gastos fijos ===== */
+.fijos-alert { display: block; width: 100%; text-align: left; border: 0; background: var(--warn-soft); color: var(--warn-text); border-bottom: 1px solid var(--warn-line); padding: 10px 16px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.fijos-alert.overdue { background: var(--danger-soft); color: var(--danger); }
+.fijos-alert.hidden { display: none; }
+.fijos-summary { background: var(--surface); border-radius: 18px; padding: 14px; margin-bottom: 12px; }
+.fijos-summary-top { display: flex; align-items: baseline; gap: 8px; }
+.fijos-summary-big { font-size: 24px; font-weight: 800; }
+.fijos-summary-label { font-size: 13px; color: var(--muted); }
+.fijos-progress { height: 8px; border-radius: 4px; background: var(--surface-2); margin: 10px 0 8px; overflow: hidden; }
+.fijos-progress div { height: 8px; background: var(--navy); border-radius: 4px; }
+.fijos-summary-sub { font-size: 13px; color: var(--warn-text); font-weight: 600; }
+.fijo-card { display: flex; gap: 10px; align-items: center; background: var(--surface); border-radius: 16px; padding: 12px 14px; margin-top: 8px; border-left: 5px solid var(--surface-2); }
+.fijo-card.paid { border-left-color: var(--ok); }
+.fijo-card.overdue { border-left-color: var(--danger); }
+.fijo-card.soon { border-left-color: var(--warn-text); }
+.fijo-main { flex: 1; min-width: 0; }
+.fijo-title { font-weight: 800; font-size: 15px; }
+.fijo-status { font-size: 13px; font-weight: 700; margin-top: 2px; color: var(--muted); }
+.fijo-status.paid { color: var(--ok); }
+.fijo-status.overdue { color: var(--danger); }
+.fijo-status.soon { color: var(--warn-text); }
+.fijo-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.batch-list { display: flex; flex-direction: column; gap: 10px; margin: 10px 0; max-height: 50vh; overflow-y: auto; }
+.batch-row { background: var(--surface-2); border-radius: 14px; padding: 10px 12px; }
+.batch-check { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 15px; font-weight: 800; color: var(--text); }
+.batch-check input { width: 20px; height: 20px; accent-color: var(--navy); }
+.batch-fields { display: flex; gap: 8px; margin-top: 8px; }
+.batch-fields input { flex: 1; min-width: 0; padding: 9px 10px; font-size: 15px; }
+.batch-meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.batch-total { font-weight: 800; font-size: 15px; margin-top: 10px; color: var(--navy); }

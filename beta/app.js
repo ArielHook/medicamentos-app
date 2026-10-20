@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'beta-6';
+const APP_VERSION = 'beta-7';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -2313,33 +2313,133 @@ function templateAccountLabel(t) {
   return acc ? accountLabel(acc) : '—';
 }
 
+// ===== BETA · Gastos fijos: estado del mes, vencimientos y carga masiva =====
+function monthKeyNow() { return todayStr().slice(0, 7); }
+function byDateDesc(x, y) { return String(y.expense_date).localeCompare(String(x.expense_date)); }
+
+// Un gasto cuenta como "de esta plantilla" si está vinculado a ella; los gastos fijos
+// viejos (sin vínculo) se reconocen por tener el mismo nombre.
+function templateMatchesExpense(t, exp) {
+  if (exp.template_id) return exp.template_id === t.id;
+  return !!exp.is_fixed && String(exp.description || '').trim().toLowerCase() === t.name.trim().toLowerCase();
+}
+function templatePaidThisMonth(t) {
+  const key = monthKeyNow();
+  return expensesCache.filter(e => String(e.expense_date).startsWith(key) && templateMatchesExpense(t, e)).sort(byDateDesc)[0] || null;
+}
+// Monto sugerido: el del último mes en que se pagó; si nunca se pagó, el habitual.
+function templateSuggestedAmount(t) {
+  const last = expensesCache.filter(e => templateMatchesExpense(t, e)).sort(byDateDesc)[0];
+  if (last) return Number(last.amount);
+  return t.default_amount ? Number(t.default_amount) : null;
+}
+function templateDueDate(t) {
+  if (!t.due_day) return null;
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return new Date(now.getFullYear(), now.getMonth(), Math.min(Number(t.due_day), daysInMonth));
+}
+function templateStatus(t) {
+  const paid = templatePaidThisMonth(t);
+  if (paid) return { state: 'paid', expense: paid, rank: 3 };
+  const due = templateDueDate(t);
+  if (!due) return { state: 'pending', due: null, days: null, rank: 2 };
+  const days = daysBetween(new Date(), due);
+  if (days < 0) return { state: 'overdue', due, days, rank: 0 };
+  if (days <= 3) return { state: 'soon', due, days, rank: 1 };
+  return { state: 'pending', due, days, rank: 2 };
+}
+function statusText(st) {
+  if (st.state === 'paid') return `Pagado · ${formatDate(st.expense.expense_date)} · ${money(st.expense.amount)}`;
+  if (st.state === 'overdue') return st.days === -1 ? 'Venció ayer' : `Venció hace ${-st.days} días`;
+  if (st.state === 'soon') return st.days === 0 ? 'Vence hoy' : st.days === 1 ? 'Vence mañana' : `Vence en ${st.days} días`;
+  if (st.due) return `Vence el ${st.due.getDate()}`;
+  return 'Pendiente';
+}
+
+function renderFijosAlert() {
+  let box = $('#fijos-alert');
+  if (!box) {
+    box = document.createElement('button');
+    box.type = 'button';
+    box.id = 'fijos-alert';
+    box.className = 'fijos-alert hidden';
+    box.addEventListener('click', () => { const tab = document.querySelector('#module-gastos .tab[data-target="gtab-fijos"]'); if (tab) tab.click(); });
+    $('#module-gastos').insertBefore(box, $('#module-gastos .tabs'));
+  }
+  const states = templatesCache.map(templateStatus);
+  const overdue = states.filter(s => s.state === 'overdue').length;
+  const soon = states.filter(s => s.state === 'soon').length;
+  if (!overdue && !soon) { box.classList.add('hidden'); return; }
+  const parts = [];
+  if (overdue) parts.push(`${overdue} ${overdue === 1 ? 'gasto fijo vencido' : 'gastos fijos vencidos'}`);
+  if (soon) parts.push(`${soon} ${soon === 1 ? 'vence' : 'vencen'} en los próximos 3 días`);
+  box.textContent = '⏰ ' + parts.join(' · ') + '  — Ver';
+  box.classList.toggle('overdue', overdue > 0);
+  box.classList.remove('hidden');
+}
+
 function renderTemplates() {
   const container = $('#templates-list');
   container.innerHTML = '';
+  renderFijosAlert();
   const writeOk = canWrite('gastos');
   if (templatesCache.length === 0) {
     container.innerHTML = '<p class="hint">Todavía no cargaste ningún gasto fijo.</p>';
     return;
   }
-  templatesCache.forEach(t => {
+  const monthName = capitalize(new Date().toLocaleDateString('es-AR', { month: 'long' }));
+  const items = templatesCache.map(t => ({ t, st: templateStatus(t) }))
+    .sort((p, q) => p.st.rank - q.st.rank || (p.st.due && q.st.due ? p.st.due - q.st.due : 0) || p.t.name.localeCompare(q.t.name));
+  const paidCount = items.filter(i => i.st.state === 'paid').length;
+  const unpaid = items.filter(i => i.st.state !== 'paid');
+  const missing = unpaid.reduce((sum, i) => sum + (templateSuggestedAmount(i.t) || 0), 0);
+  const noAmount = unpaid.filter(i => !templateSuggestedAmount(i.t)).length;
+
+  const summary = document.createElement('div');
+  summary.className = 'fijos-summary';
+  summary.innerHTML = `
+    <div class="fijos-summary-top"><span class="fijos-summary-big">${paidCount} de ${items.length}</span><span class="fijos-summary-label">pagados en ${escapeHtml(monthName)}</span></div>
+    <div class="fijos-progress"><div style="width:${Math.round(paidCount / items.length * 100)}%"></div></div>
+    <div class="fijos-summary-sub">${unpaid.length === 0 ? 'Todo al día este mes' : `Faltan ${money(missing)}${noAmount ? ` (+ ${noAmount} sin monto)` : ''}`}</div>`;
+  container.appendChild(summary);
+
+  if (writeOk && unpaid.length > 0) {
+    const batch = document.createElement('button');
+    batch.type = 'button';
+    batch.className = 'btn-primary btn-block';
+    batch.style.marginTop = '0';
+    batch.textContent = `Cargar los fijos de ${monthName} (${unpaid.length})`;
+    batch.addEventListener('click', openBatchFixedModal);
+    container.appendChild(batch);
+  }
+
+  items.forEach(({ t, st }) => {
     const cat = categoriesCache.find(c => c.id === t.category_id);
     const row = document.createElement('div');
-    row.className = 'category-row';
+    row.className = 'fijo-card ' + st.state;
     const detail = t.expense_type === 'cuenta_externa'
       ? `💳 ${templateAccountLabel(t)}`
       : `Entre: ${(t.default_participants || []).map(uid => profileName(uid)).join(', ') || '—'}`;
+    const suggested = templateSuggestedAmount(t);
     row.innerHTML = `
-      <div>
-        <div class="label">📌 ${escapeHtml(t.name)}${t.default_amount ? ` — $${Number(t.default_amount).toLocaleString('es-AR')}` : ''}</div>
-        <div class="shop-meta">${cat ? escapeHtml(cat.name) + ' · ' : ''}${detail}</div>
+      <div class="fijo-main">
+        <div class="fijo-title">${escapeHtml(t.name)}</div>
+        <div class="fijo-status ${st.state}">${escapeHtml(statusText(st))}</div>
+        <div class="shop-meta">${cat ? escapeHtml(cat.name) + ' · ' : ''}${detail}${suggested && st.state !== 'paid' ? ` · ~${money(suggested)}` : ''}</div>
       </div>
-      ${writeOk ? `
-      <span style="display:flex;gap:4px;">
-        <button type="button" class="btn-icon-xs" data-edit-tpl="${t.id}" title="Editar">✎</button>
-        <button type="button" class="btn-icon-xs danger" data-del-tpl="${t.id}" title="Eliminar">✕</button>
-      </span>` : ''}
-    `;
+      <div class="fijo-actions">
+        ${writeOk && st.state !== 'paid' ? '<button type="button" class="btn-pay" data-load-tpl>Cargar</button>' : ''}
+        ${writeOk ? `<button type="button" class="btn-icon-xs" data-edit-tpl="${t.id}" title="Editar">✎</button>
+        <button type="button" class="btn-icon-xs danger" data-del-tpl="${t.id}" title="Eliminar">✕</button>` : ''}
+      </div>`;
     if (writeOk) {
+      const load = row.querySelector('[data-load-tpl]');
+      if (load) load.addEventListener('click', () => {
+        openExpenseModal(null);
+        applyTemplateToExpenseForm(t);
+        if (suggested) $('#expense-amount').value = suggested;
+      });
       row.querySelector('[data-edit-tpl]').addEventListener('click', () => openTemplateModal(t.id));
       row.querySelector('[data-del-tpl]').addEventListener('click', async () => {
         if (!confirm(`¿Eliminar el gasto fijo "${t.name}"?`)) return;
@@ -2349,6 +2449,114 @@ function renderTemplates() {
     }
     container.appendChild(row);
   });
+}
+
+// Carga todos los fijos que faltan del mes en un solo paso (con monto y fecha editables)
+function openBatchFixedModal() {
+  const pending = templatesCache.filter(t => !templatePaidThisMonth(t));
+  if (pending.length === 0) { alert('Ya están cargados todos los gastos fijos de este mes.'); return; }
+  let modal = $('#modal-batch-fixed');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-batch-fixed';
+    modal.className = 'modal hidden';
+    modal.innerHTML = '<div class="modal-content"></div>';
+    document.body.appendChild(modal);
+  }
+  const monthName = capitalize(new Date().toLocaleDateString('es-AR', { month: 'long' }));
+  const box = modal.querySelector('.modal-content');
+  const rows = pending.map(t => {
+    const sug = templateSuggestedAmount(t);
+    const due = templateDueDate(t);
+    const dateVal = due && monthKeyNow() === (due.getFullYear() + '-' + String(due.getMonth() + 1).padStart(2, '0'))
+      ? `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}` : todayStr();
+    const kind = t.expense_type === 'cuenta_externa' ? `💳 ${templateAccountLabel(t)}` : `Entre: ${(t.default_participants || []).map(profileName).join(', ') || '—'}`;
+    return `<div class="batch-row" data-tid="${t.id}">
+      <label class="batch-check"><input type="checkbox" checked /> <span>${escapeHtml(t.name)}</span></label>
+      <div class="batch-fields">
+        <input type="number" class="batch-amount" min="0" step="0.01" value="${sug || ''}" placeholder="Monto" aria-label="Monto de ${escapeHtml(t.name)}" />
+        <input type="date" class="batch-date" value="${dateVal}" aria-label="Fecha de ${escapeHtml(t.name)}" />
+      </div>
+      <div class="batch-meta">${kind}${sug ? '' : ' · completá el monto'}</div>
+    </div>`;
+  }).join('');
+  const payerSelect = myProfile?.is_admin
+    ? `<label>¿Quién pagó los compartidos?</label><select id="batch-paid-by">${usersWithModuleAccess('gastos').map(p => `<option value="${p.user_id}" ${p.user_id === currentUser.id ? 'selected' : ''}>${escapeHtml(p.display_name)}${p.user_id === currentUser.id ? ' (vos)' : ''}</option>`).join('')}</select>` : '';
+  box.innerHTML = `
+    <h2>Cargar fijos de ${escapeHtml(monthName)}</h2>
+    <p class="hint">Se usa el monto del último mes. Cambiá los que varían y destildá los que todavía no querés cargar.</p>
+    <div class="batch-list">${rows}</div>
+    ${payerSelect}
+    <div class="batch-total" id="batch-total"></div>
+    <div class="modal-actions">
+      <div class="spacer"></div>
+      <button type="button" class="btn-secondary" id="batch-cancel">Cancelar</button>
+      <button type="button" class="btn-primary" id="batch-confirm">Cargar</button>
+    </div>`;
+  const refresh = () => {
+    const sel = [...box.querySelectorAll('.batch-row')].filter(r => r.querySelector('input[type=checkbox]').checked);
+    const total = sel.reduce((sum, r) => sum + (Number(r.querySelector('.batch-amount').value) || 0), 0);
+    $('#batch-total').textContent = `${sel.length} ${sel.length === 1 ? 'gasto' : 'gastos'} · ${money(total)}`;
+    $('#batch-confirm').textContent = sel.length ? `Cargar ${sel.length}` : 'Cargar';
+  };
+  box.addEventListener('input', refresh);
+  box.addEventListener('change', refresh);
+  $('#batch-cancel').addEventListener('click', () => modal.classList.add('hidden'));
+  $('#batch-confirm').addEventListener('click', () => submitBatchFixed(pending, modal));
+  refresh();
+  modal.classList.remove('hidden');
+}
+
+async function submitBatchFixed(pending, modal) {
+  const jobs = [];
+  for (const row of modal.querySelectorAll('.batch-row')) {
+    if (!row.querySelector('input[type=checkbox]').checked) continue;
+    const t = pending.find(x => x.id === row.dataset.tid);
+    const amount = Number(row.querySelector('.batch-amount').value);
+    const date = row.querySelector('.batch-date').value;
+    if (!(amount > 0)) { alert(`Falta el monto de "${t.name}".`); return; }
+    if (!date) { alert(`Falta la fecha de "${t.name}".`); return; }
+    if (t.expense_type !== 'cuenta_externa' && !(t.default_participants || []).length) {
+      alert(`"${t.name}" no tiene personas con quienes repartirlo. Editalo en Gastos fijos o destildalo.`); return;
+    }
+    jobs.push({ t, amount, date });
+  }
+  if (jobs.length === 0) { alert('Elegí al menos un gasto.'); return; }
+  const paidBy = myProfile?.is_admin ? $('#batch-paid-by').value : currentUser.id;
+  const confirmBtn = $('#batch-confirm');
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = 'Cargando...';
+  const failed = [];
+  for (const { t, amount, date } of jobs) {
+    try {
+      const externa = t.expense_type === 'cuenta_externa';
+      const payload = {
+        description: t.name, amount, expense_date: date, category_id: t.category_id, notes: null,
+        is_fixed: true, template_id: t.id, created_by: currentUser.id,
+        expense_type: externa ? 'cuenta_externa' : 'compartido',
+        payment_account_id: externa ? t.payment_account_id : null,
+        paid_by: externa ? null : paidBy,
+      };
+      const { data, error } = await sb.from('expenses').insert(payload).select().single();
+      if (error) throw new Error(error.message);
+      if (!externa) {
+        const parts = t.default_participants;
+        const share = Math.round((amount / parts.length) * 100) / 100;
+        const splits = parts.map((uid, idx) => ({
+          expense_id: data.id, user_id: uid,
+          share_amount: idx === parts.length - 1 ? Math.round((amount - share * (parts.length - 1)) * 100) / 100 : share,
+        }));
+        const { error: splitErr } = await sb.from('expense_splits').insert(splits);
+        if (splitErr) { await sb.from('expenses').delete().eq('id', data.id); throw new Error(splitErr.message); }
+      }
+      logActivity('gastos', 'create', `Gasto fijo: ${t.name} (${money(amount)})`, externa ? `Carga masiva · Cuenta externa: ${templateAccountLabel(t)}` : `Carga masiva · Pagó: ${profileName(paidBy)}. Entre: ${t.default_participants.map(profileName).join(', ')}`);
+    } catch (err) {
+      failed.push(`${t.name}: ${err.message}`);
+    }
+  }
+  modal.classList.add('hidden');
+  await loadGastos();
+  if (failed.length) alert('No se pudieron cargar:\n' + failed.join('\n'));
 }
 
 $('#btn-add-template').addEventListener('click', () => openTemplateModal(null));
@@ -2397,6 +2605,7 @@ function openTemplateModal(templateId) {
     $('#template-id').value = t.id;
     $('#template-name').value = t.name;
     $('#template-amount').value = t.default_amount || '';
+    $('#template-due-day').value = t.due_day || '';
     $('#template-category').value = t.category_id || '';
     if (t.expense_type === 'cuenta_externa') $('#template-account').value = t.payment_account_id || '';
     $('#btn-delete-template').classList.remove('hidden');
@@ -2416,7 +2625,9 @@ $('#form-template').addEventListener('submit', async (e) => {
   const expenseType = $('#template-type-toggle .segmented-btn.active')?.dataset.type || 'compartido';
   if (!name) return;
 
-  const payload = { name, default_amount: amount, category_id: categoryId, expense_type: expenseType };
+  const dueDayRaw = $('#template-due-day').value;
+  const dueDay = dueDayRaw ? Math.min(31, Math.max(1, Math.round(Number(dueDayRaw)))) : null;
+  const payload = { name, default_amount: amount, category_id: categoryId, expense_type: expenseType, due_day: dueDay };
   if (expenseType === 'cuenta_externa') {
     const accountId = $('#template-account').value;
     if (!accountId) { alert('Elegí una cuenta.'); return; }
@@ -2468,6 +2679,7 @@ function applyTemplateToExpenseForm(t) {
   if (t.default_amount) $('#expense-amount').value = t.default_amount;
   $('#expense-category').value = t.category_id || '';
   $('#expense-is-fixed').value = '1';
+  $('#expense-template-id').value = t.id;
 
   $$('#expense-type-toggle .segmented-btn').forEach(b => b.classList.toggle('active', b.dataset.type === t.expense_type));
   const isExterna = t.expense_type === 'cuenta_externa';
@@ -2488,6 +2700,7 @@ function applyTemplateToExpenseForm(t) {
 function openExpenseModal(expenseId) {
   $('#form-expense').reset();
   $('#expense-is-fixed').value = '';
+  $('#expense-template-id').value = '';
   $('#btn-delete-expense').classList.add('hidden');
   $('#expense-date').value = todayStr();
 
@@ -2553,6 +2766,7 @@ function openExpenseModal(expenseId) {
     $('#expense-category').value = exp.category_id || '';
     $('#expense-notes').value = exp.notes || '';
     $('#expense-is-fixed').value = exp.is_fixed ? '1' : '';
+    $('#expense-template-id').value = exp.template_id || '';
     $('#btn-delete-expense').classList.remove('hidden');
 
     if (exp.expense_type === 'cuenta_externa') {
@@ -2584,6 +2798,7 @@ $('#form-expense').addEventListener('submit', async (e) => {
   const categoryId = $('#expense-category').value || null;
   const notes = $('#expense-notes').value.trim() || null;
   const isFixed = $('#expense-is-fixed').value === '1';
+  const templateId = $('#expense-template-id').value || null;
   const expenseType = currentExpenseType();
 
   const before = expenseId ? expensesCache.find(x => x.id === expenseId) : null;
@@ -2595,7 +2810,7 @@ $('#form-expense').addEventListener('submit', async (e) => {
       if (!accountId) { alert('Elegí una cuenta (o cargá una primero en la pestaña "Cuentas").'); return; }
 
       const payload = {
-        description, amount, expense_date: expenseDate, category_id: categoryId, notes, is_fixed: isFixed,
+        description, amount, expense_date: expenseDate, category_id: categoryId, notes, is_fixed: isFixed, template_id: templateId,
         expense_type: 'cuenta_externa', payment_account_id: accountId,
         paid_by: null, created_by: currentUser.id,
       };
@@ -2618,7 +2833,7 @@ $('#form-expense').addEventListener('submit', async (e) => {
       if (participants.length === 0) { alert('Elegí al menos un participante.'); return; }
 
       const payload = {
-        description, amount, expense_date: expenseDate, category_id: categoryId, notes, is_fixed: isFixed,
+        description, amount, expense_date: expenseDate, category_id: categoryId, notes, is_fixed: isFixed, template_id: templateId,
         expense_type: 'compartido', payment_account_id: null,
         paid_by: paidBy, created_by: currentUser.id,
       };
