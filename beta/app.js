@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'beta-7';
+const APP_VERSION = 'beta-8';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -2339,9 +2339,27 @@ function templateDueDate(t) {
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   return new Date(now.getFullYear(), now.getMonth(), Math.min(Number(t.due_day), daysInMonth));
 }
+function monthIndex(dateStr) { const [y, m] = String(dateStr).slice(0, 7).split('-').map(Number); return y * 12 + m - 1; }
+function periodLabel(t) {
+  return { 2: 'Bimestral', 3: 'Trimestral', 6: 'Semestral', 12: 'Anual' }[t.period_months] || '';
+}
+// Si se pagó dentro de su período (ej. hace 1 mes en uno bimestral), este mes no toca.
+function templateSkipInfo(t) {
+  const period = t.period_months || 1;
+  if (period <= 1) return null;
+  const last = expensesCache.filter(e => templateMatchesExpense(t, e)).sort(byDateDesc)[0];
+  if (!last) return null;
+  const diff = monthIndex(todayStr()) - monthIndex(last.expense_date);
+  if (diff <= 0 || diff >= period) return null;
+  const next = new Date(Math.floor((monthIndex(last.expense_date) + period) / 12), (monthIndex(last.expense_date) + period) % 12, 1);
+  return { last, next };
+}
+function templateIsPending(t) { return !templatePaidThisMonth(t) && !templateSkipInfo(t); }
 function templateStatus(t) {
   const paid = templatePaidThisMonth(t);
   if (paid) return { state: 'paid', expense: paid, rank: 3 };
+  const skip = templateSkipInfo(t);
+  if (skip) return { state: 'skip', ...skip, rank: 4 };
   const due = templateDueDate(t);
   if (!due) return { state: 'pending', due: null, days: null, rank: 2 };
   const days = daysBetween(new Date(), due);
@@ -2350,6 +2368,7 @@ function templateStatus(t) {
   return { state: 'pending', due, days, rank: 2 };
 }
 function statusText(st) {
+  if (st.state === 'skip') return 'No toca este mes · próximo en ' + capitalize(st.next.toLocaleDateString('es-AR', { month: 'long' }));
   if (st.state === 'paid') return `Pagado · ${formatDate(st.expense.expense_date)} · ${money(st.expense.amount)}`;
   if (st.state === 'overdue') return st.days === -1 ? 'Venció ayer' : `Venció hace ${-st.days} días`;
   if (st.state === 'soon') return st.days === 0 ? 'Vence hoy' : st.days === 1 ? 'Vence mañana' : `Vence en ${st.days} días`;
@@ -2391,16 +2410,17 @@ function renderTemplates() {
   const monthName = capitalize(new Date().toLocaleDateString('es-AR', { month: 'long' }));
   const items = templatesCache.map(t => ({ t, st: templateStatus(t) }))
     .sort((p, q) => p.st.rank - q.st.rank || (p.st.due && q.st.due ? p.st.due - q.st.due : 0) || p.t.name.localeCompare(q.t.name));
-  const paidCount = items.filter(i => i.st.state === 'paid').length;
-  const unpaid = items.filter(i => i.st.state !== 'paid');
+  const dueItems = items.filter(i => i.st.state !== 'skip');
+  const paidCount = dueItems.filter(i => i.st.state === 'paid').length;
+  const unpaid = dueItems.filter(i => i.st.state !== 'paid');
   const missing = unpaid.reduce((sum, i) => sum + (templateSuggestedAmount(i.t) || 0), 0);
   const noAmount = unpaid.filter(i => !templateSuggestedAmount(i.t)).length;
 
   const summary = document.createElement('div');
   summary.className = 'fijos-summary';
   summary.innerHTML = `
-    <div class="fijos-summary-top"><span class="fijos-summary-big">${paidCount} de ${items.length}</span><span class="fijos-summary-label">pagados en ${escapeHtml(monthName)}</span></div>
-    <div class="fijos-progress"><div style="width:${Math.round(paidCount / items.length * 100)}%"></div></div>
+    <div class="fijos-summary-top"><span class="fijos-summary-big">${paidCount} de ${dueItems.length}</span><span class="fijos-summary-label">pagados en ${escapeHtml(monthName)}</span></div>
+    <div class="fijos-progress"><div style="width:${Math.round(paidCount / Math.max(dueItems.length, 1) * 100)}%"></div></div>
     <div class="fijos-summary-sub">${unpaid.length === 0 ? 'Todo al día este mes' : `Faltan ${money(missing)}${noAmount ? ` (+ ${noAmount} sin monto)` : ''}`}</div>`;
   container.appendChild(summary);
 
@@ -2424,12 +2444,12 @@ function renderTemplates() {
     const suggested = templateSuggestedAmount(t);
     row.innerHTML = `
       <div class="fijo-main">
-        <div class="fijo-title">${escapeHtml(t.name)}</div>
+        <div class="fijo-title">${escapeHtml(t.name)}${periodLabel(t) ? ` <span class="fijo-period">${periodLabel(t)}</span>` : ''}</div>
         <div class="fijo-status ${st.state}">${escapeHtml(statusText(st))}</div>
         <div class="shop-meta">${cat ? escapeHtml(cat.name) + ' · ' : ''}${detail}${suggested && st.state !== 'paid' ? ` · ~${money(suggested)}` : ''}</div>
       </div>
       <div class="fijo-actions">
-        ${writeOk && st.state !== 'paid' ? '<button type="button" class="btn-pay" data-load-tpl>Cargar</button>' : ''}
+        ${writeOk && st.state !== 'paid' ? `<button type="button" class="${st.state === 'skip' ? 'btn-secondary' : 'btn-pay'}" data-load-tpl>Cargar</button>` : ''}
         ${writeOk ? `<button type="button" class="btn-icon-xs" data-edit-tpl="${t.id}" title="Editar">✎</button>
         <button type="button" class="btn-icon-xs danger" data-del-tpl="${t.id}" title="Eliminar">✕</button>` : ''}
       </div>`;
@@ -2453,7 +2473,7 @@ function renderTemplates() {
 
 // Carga todos los fijos que faltan del mes en un solo paso (con monto y fecha editables)
 function openBatchFixedModal() {
-  const pending = templatesCache.filter(t => !templatePaidThisMonth(t));
+  const pending = templatesCache.filter(templateIsPending);
   if (pending.length === 0) { alert('Ya están cargados todos los gastos fijos de este mes.'); return; }
   let modal = $('#modal-batch-fixed');
   if (!modal) {
@@ -2606,6 +2626,7 @@ function openTemplateModal(templateId) {
     $('#template-name').value = t.name;
     $('#template-amount').value = t.default_amount || '';
     $('#template-due-day').value = t.due_day || '';
+    $('#template-period').value = String(t.period_months || 1);
     $('#template-category').value = t.category_id || '';
     if (t.expense_type === 'cuenta_externa') $('#template-account').value = t.payment_account_id || '';
     $('#btn-delete-template').classList.remove('hidden');
@@ -2625,9 +2646,10 @@ $('#form-template').addEventListener('submit', async (e) => {
   const expenseType = $('#template-type-toggle .segmented-btn.active')?.dataset.type || 'compartido';
   if (!name) return;
 
+  const periodMonths = Number($('#template-period').value) || 1;
   const dueDayRaw = $('#template-due-day').value;
   const dueDay = dueDayRaw ? Math.min(31, Math.max(1, Math.round(Number(dueDayRaw)))) : null;
-  const payload = { name, default_amount: amount, category_id: categoryId, expense_type: expenseType, due_day: dueDay };
+  const payload = { name, default_amount: amount, category_id: categoryId, expense_type: expenseType, due_day: dueDay, period_months: periodMonths };
   if (expenseType === 'cuenta_externa') {
     const accountId = $('#template-account').value;
     if (!accountId) { alert('Elegí una cuenta.'); return; }
