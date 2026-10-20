@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'beta-8';
+const APP_VERSION = 'beta-9';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -2719,7 +2719,20 @@ function applyTemplateToExpenseForm(t) {
   $('#expense-amount').focus();
 }
 
+function populateExpenseTemplateSelect() {
+  const sel = $('#expense-template-id');
+  sel.innerHTML = '<option value="">Ninguno (gasto común)</option>' +
+    templatesCache.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+}
+$('#expense-template-id').addEventListener('change', () => {
+  const id = $('#expense-template-id').value;
+  $('#expense-is-fixed').value = id ? '1' : '';
+  const t = templatesCache.find(x => x.id === id);
+  if (t && !$('#expense-description').value.trim()) $('#expense-description').value = t.name;
+});
+
 function openExpenseModal(expenseId) {
+  populateExpenseTemplateSelect();
   $('#form-expense').reset();
   $('#expense-is-fixed').value = '';
   $('#expense-template-id').value = '';
@@ -2819,8 +2832,8 @@ $('#form-expense').addEventListener('submit', async (e) => {
   const expenseDate = $('#expense-date').value;
   const categoryId = $('#expense-category').value || null;
   const notes = $('#expense-notes').value.trim() || null;
-  const isFixed = $('#expense-is-fixed').value === '1';
   const templateId = $('#expense-template-id').value || null;
+  const isFixed = !!templateId || $('#expense-is-fixed').value === '1';
   const expenseType = currentExpenseType();
 
   const before = expenseId ? expensesCache.find(x => x.id === expenseId) : null;
