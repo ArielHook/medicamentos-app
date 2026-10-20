@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'beta-4';
+const APP_VERSION = 'beta-5';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -1737,7 +1737,7 @@ function renderExpenses() {
       <div class="top-line">
         <span>${escapeHtml(exp.description)}</span>
         <span class="expense-row-right">
-          <span>$${Number(exp.amount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
+          <span class="expense-amount">$${Number(exp.amount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
           ${writeOk ? `
           <span class="expense-menu-wrap">
             <button type="button" class="btn-dots" data-id="${exp.id}">⋮</button>

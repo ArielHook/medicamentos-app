@@ -1316,3 +1316,26 @@ body:has(#view-app.hidden) .bottom-nav { display: none; }
 .shop-row { border-radius: 16px; box-shadow: none; }
 .category-tile { background: var(--surface); border-radius: 18px; color: var(--navy); }
 .category-header { letter-spacing: 0.6px; }
+
+/* ===== BETA etapa 4 · solapas en píldoras y tarjetas de gastos ===== */
+.tabs { gap: 8px; padding: 10px 14px; top: 63px; border-bottom: 1px solid var(--border); scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  flex-direction: row;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.tab-icon { font-size: 15px; }
+.tab.active { background: var(--navy); color: var(--on-accent); border-color: var(--navy); font-weight: 800; }
+.expense-row { border-radius: 16px; box-shadow: none; padding: 14px; }
+.expense-row .top-line { font-size: 15px; gap: 10px; }
+.expense-amount { font-size: 17px; font-weight: 800; white-space: nowrap; }
+.expense-row .meta { font-size: 12.5px; line-height: 1.4; }
+.fixed-badge { color: var(--warn-text); font-weight: 700; }
