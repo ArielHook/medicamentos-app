@@ -265,7 +265,7 @@ select {
 .module-view { }
 
 .low-stock-banner {
-  background: var(--surface)3e0;
+  background: var(--warn-soft);
   border: 1px solid var(--warn-line);
   border-radius: 14px;
   padding: 12px 14px;
@@ -733,7 +733,7 @@ select {
 .balance-status { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
 
 .debt-row {
-  background: var(--surface)7e8;
+  background: var(--warn-soft);
   padding: 10px 14px;
   border-radius: 10px;
   margin-bottom: 6px;
@@ -788,7 +788,7 @@ select {
 .account-row .label, .category-row .label { font-weight: 700; }
 .fixed-badge {
   display: inline-block;
-  background: var(--surface)3d6;
+  background: var(--warn-soft);
   color: var(--warn-text);
   padding: 1px 6px;
   border-radius: 8px;
@@ -1288,3 +1288,30 @@ body:has(#view-app.hidden) .bottom-nav { display: none; }
 .stock-bar-fill.low { background: var(--warn-text); }
 .stock-bar-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
 .check-btn { border-radius: 8px; }
+
+/* ===== BETA etapa 3 · Balances ===== */
+.month-card { background: linear-gradient(135deg, #17324A, #1B2438); border: 1px solid #2B4A66; border-radius: 22px; padding: 18px; margin-bottom: 14px; }
+.month-label { font-size: 13px; color: var(--muted); }
+.month-amount { font-size: 32px; font-weight: 800; letter-spacing: -0.5px; margin: 2px 0; }
+.month-sub { font-size: 13px; color: var(--navy); }
+.balance-list { display: flex; flex-direction: column; gap: 8px; }
+.balance-row { background: var(--surface); border-radius: 16px; padding: 12px 14px; }
+.balance-row-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 15px; }
+.balance-row-name { font-weight: 800; }
+.balance-row-name small { font-weight: 600; font-size: 11px; color: var(--muted); text-transform: uppercase; margin-left: 6px; }
+.balance-row-amount { font-weight: 800; }
+.balance-row.positive .balance-row-amount { color: var(--navy); }
+.balance-row.negative .balance-row-amount { color: var(--warn-text); }
+.balance-track { height: 6px; border-radius: 3px; background: var(--surface-2); position: relative; margin-top: 8px; }
+.balance-fill { position: absolute; top: 0; height: 6px; border-radius: 3px; }
+.balance-row.positive .balance-fill { left: 50%; background: var(--navy); }
+.balance-row.negative .balance-fill { right: 50%; background: var(--warn-text); }
+.debt-row { display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: 14px; padding: 10px 14px; margin-bottom: 8px; font-size: 14px; }
+.debt-text { flex: 1; }
+.btn-pay { height: 30px; padding: 0 12px; border-radius: 15px; border: 0; background: var(--surface-2); color: var(--navy); font-family: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+
+/* ===== BETA etapa 3 · Compras ===== */
+.low-stock-banner { background: var(--warn-soft); }
+.shop-row { border-radius: 16px; box-shadow: none; }
+.category-tile { background: var(--surface); border-radius: 18px; color: var(--navy); }
+.category-header { letter-spacing: 0.6px; }

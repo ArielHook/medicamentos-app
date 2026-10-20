@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'beta-2';
+const APP_VERSION = 'beta-3';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -1981,24 +1981,36 @@ function renderBalances() {
   const net = computeNetBalances();
   const eligible = usersWithModuleAccess('gastos');
   const container = $('#balances-summary');
-  container.innerHTML = '<h3 class="section-title">Balance de cada uno</h3><div class="balance-cards-grid"></div>';
-  const grid = container.querySelector('.balance-cards-grid');
+
+  // BETA: gasto compartido del mes
+  const monthKey = todayStr().slice(0, 7);
+  const monthExp = expensesCache.filter(exp => exp.expense_type !== 'cuenta_externa' && String(exp.expense_date).startsWith(monthKey));
+  const monthTotal = monthExp.reduce((sum, exp) => sum + Number(exp.amount), 0);
+  const monthName = capitalize(new Date().toLocaleDateString('es-AR', { month: 'long' }));
+  container.innerHTML = `
+    <div class="month-card">
+      <div class="month-label">Gasto compartido · ${escapeHtml(monthName)}</div>
+      <div class="month-amount">${money(monthTotal)}</div>
+      <div class="month-sub">${monthExp.length} ${monthExp.length === 1 ? 'gasto' : 'gastos'}${monthExp.length ? ' · promedio ' + money(monthTotal / monthExp.length) : ''}</div>
+    </div>
+    <h3 class="section-title">Balance de cada uno</h3><div class="balance-list"></div>`;
+  const list = container.querySelector('.balance-list');
+  const maxAbs = Math.max(1, ...eligible.map(p => Math.abs(net[p.user_id] || 0)));
   eligible.forEach(p => {
     const amount = Math.round((net[p.user_id] || 0) * 100) / 100;
     const isPositive = amount > 0.01;
     const isNegative = amount < -0.01;
-    const card = document.createElement('div');
-    card.className = 'balance-card-v2' + (isPositive ? ' positive' : isNegative ? ' negative' : ' neutral');
     const status = isPositive ? 'a favor' : isNegative ? 'pendiente' : 'al día';
-    const amountText = (isPositive || isNegative) ? money(Math.abs(amount)) : '—';
-    const initial = p.display_name.trim().charAt(0).toUpperCase();
-    card.innerHTML = `
-      <div class="balance-avatar">${escapeHtml(initial)}</div>
-      <div class="balance-name">${escapeHtml(p.display_name)}</div>
-      <div class="balance-amount">${amountText}</div>
-      <div class="balance-status">${status}</div>
-    `;
-    grid.appendChild(card);
+    const pct = Math.round(Math.abs(amount) / maxAbs * 50);
+    const row = document.createElement('div');
+    row.className = 'balance-row ' + (isPositive ? 'positive' : isNegative ? 'negative' : 'neutral');
+    row.innerHTML = `
+      <div class="balance-row-top">
+        <span class="balance-row-name">${escapeHtml(p.display_name)} <small>${status}</small></span>
+        <span class="balance-row-amount">${isPositive ? '+ ' : isNegative ? '- ' : ''}${(isPositive || isNegative) ? money(Math.abs(amount)) : '—'}</span>
+      </div>
+      <div class="balance-track"><div class="balance-fill" style="width:${pct}%"></div></div>`;
+    list.appendChild(row);
   });
 
   const debts = simplifyDebts(net);
@@ -2015,10 +2027,24 @@ function renderBalances() {
     debts.forEach(d => {
       const row = document.createElement('div');
       row.className = 'debt-row';
-      row.innerHTML = `<strong>${escapeHtml(profileName(d.from))}</strong> → <strong>${escapeHtml(profileName(d.to))}</strong>: <strong>${money(d.amount)}</strong>`;
+      const canPay = canWrite('gastos') && (myProfile?.is_admin || d.from === currentUser.id);
+      row.innerHTML = `<span class="debt-text"><strong>${escapeHtml(profileName(d.from))}</strong> → <strong>${escapeHtml(profileName(d.to))}</strong></span><strong class="debt-amount">${money(d.amount)}</strong>${canPay ? '<button type="button" class="btn-pay">Pagar</button>' : ''}`;
+      const btn = row.querySelector('.btn-pay');
+      if (btn) btn.addEventListener('click', () => payDebt(d));
       container.appendChild(row);
     });
   }
+}
+
+// BETA: abre "Registrar pago" ya completado con el ajuste sugerido
+function payDebt(d) {
+  $('#btn-add-settlement').click();
+  if (myProfile?.is_admin) {
+    $('#settlement-from-select').value = d.from;
+    populateSettlementToOptions();
+  }
+  $('#settlement-to').value = d.to;
+  $('#settlement-amount').value = Math.round(d.amount * 100) / 100;
 }
 
 function renderExternalBalances() {
