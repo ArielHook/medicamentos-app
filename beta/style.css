@@ -1402,3 +1402,9 @@ body:has(#view-app.hidden) .bottom-nav { display: none; }
   margin: 0 8px 0 0;
 }
 .category-row:has(.category-edit-input) { padding: 8px 12px; }
+
+/* Botones de acción más grandes (editar, borrar, cargar) */
+.btn-icon-xs { width: 40px; height: 40px; border-radius: 10px; font-size: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.btn-pay { height: 40px; padding: 0 16px; border-radius: 20px; font-size: 14px; }
+.pantry-actions, .fijo-actions { gap: 6px; }
+.category-row .label, .account-row .label { font-size: 15px; }
