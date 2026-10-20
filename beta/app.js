@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'beta-1';
+const APP_VERSION = 'beta-2';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -494,6 +494,7 @@ function renderItinerario() {
     container.innerHTML = '<p style="color:#6b7280">Todavía no cargaste medicamentos. Andá a la pestaña "Medicamentos" para agregar el primero.</p>';
     return;
   }
+  renderItinerarioResumen();
   // Agrupar schedule_items por time_label, usando el orden guardado
   // por el usuario (arrastrando tarjetas), no el orden de carga.
   const groups = {};
@@ -516,6 +517,12 @@ function renderItinerario() {
         <button type="button" class="btn-move" data-label="${escapeHtml(label)}" data-dir="1" ${idx === order.length - 1 ? 'disabled' : ''}>▼</button>
       </span>
     `;
+    const gTotal = items.filter(si => medsCache.some(m => m.id === si.medication_id)).length;
+    const gDone = items.filter(si => doseLogToday.has(si.id) && medsCache.some(m => m.id === si.medication_id)).length;
+    const gStatus = document.createElement('span');
+    gStatus.className = 'group-status ' + (gTotal > 0 && gDone === gTotal ? 'done' : 'pending');
+    gStatus.textContent = gTotal > 0 && gDone === gTotal ? 'completo' : `${gDone}/${gTotal}`;
+    header.firstElementChild.appendChild(gStatus);
     div.appendChild(header);
     items.forEach(si => {
       const med = medsCache.find(m => m.id === si.medication_id);
@@ -545,6 +552,39 @@ function renderItinerario() {
   });
 }
 
+// BETA: tarjeta de resumen (anillo de progreso + stock bajo)
+function renderItinerarioResumen() {
+  let box = $('#itinerario-resumen');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'itinerario-resumen';
+    box.className = 'resumen-row';
+    $('#itinerario-list').parentNode.insertBefore(box, $('#itinerario-list'));
+  }
+  const valid = scheduleCache.filter(si => medsCache.some(m => m.id === si.medication_id));
+  const total = valid.length;
+  const done = valid.filter(si => doseLogToday.has(si.id)).length;
+  const pct = total ? done / total : 0;
+  const C = 2 * Math.PI * 22;
+  const lowCount = medsCache.filter(med => {
+    const s = stockCache.find(x => x.medication_id === med.id);
+    const days = daysRemainingFor(med.id);
+    return s && days !== null && days <= Number(s.low_stock_days_threshold);
+  }).length;
+  box.innerHTML = `
+    <div class="resumen-card">
+      <svg width="54" height="54" viewBox="0 0 54 54" aria-hidden="true">
+        <circle cx="27" cy="27" r="22" fill="none" stroke="var(--surface-2)" stroke-width="6"/>
+        <circle cx="27" cy="27" r="22" fill="none" stroke="var(--navy)" stroke-width="6" stroke-linecap="round"
+          stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - pct)).toFixed(1)}" transform="rotate(-90 27 27)"/>
+      </svg>
+      <div><div class="resumen-big">${done} de ${total}</div><div class="resumen-sub">tomas de hoy</div></div>
+    </div>
+    <div class="resumen-card ${lowCount ? 'warn' : ''}">
+      <div><div class="resumen-big">${lowCount}</div><div class="resumen-sub">${lowCount === 1 ? 'con stock bajo' : 'con stock bajo'}</div></div>
+    </div>`;
+}
+
 async function toggleDose(scheduleItemId, btn) {
   // El itinerario es de referencia: marcar/desmarcar una toma queda
   // registrado como historial, pero NO afecta el stock. El stock se
@@ -557,6 +597,7 @@ async function toggleDose(scheduleItemId, btn) {
     doseLogToday.delete(scheduleItemId);
     btn.classList.remove('checked');
     btn.textContent = '';
+    renderItinerarioResumen();
   } else {
     await sb.from('dose_log').insert({
       schedule_item_id: scheduleItemId,
@@ -566,6 +607,7 @@ async function toggleDose(scheduleItemId, btn) {
     doseLogToday.add(scheduleItemId);
     btn.classList.add('checked');
     btn.textContent = '✓';
+    renderItinerarioResumen();
   }
 }
 
@@ -643,6 +685,8 @@ function renderStock() {
           ${zeroDate ? `<div class="zero-date">${isLow ? '⚠️ ' : ''}Se agota: ${formatDate(zeroDate)} (${days} días)</div>` : `<div class="meta">Sin horarios cargados</div>`}
         </div>
       </div>
+      ${days !== null ? `<div class="stock-bar" aria-hidden="true"><div class="stock-bar-fill ${isLow ? 'low' : ''}" style="width:${Math.max(4, Math.min(100, Math.round(days / 30 * 100)))}%"></div></div>
+      <div class="stock-bar-label">${Math.max(0, days)} días de stock</div>` : ''}
     `;
     container.appendChild(card);
   });

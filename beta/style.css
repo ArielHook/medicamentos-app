@@ -1050,7 +1050,7 @@ select {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  z-index: 20;
+  z-index: 40;
 }
 .modal-content {
   background: var(--surface);
@@ -1272,3 +1272,19 @@ hr, .menu-divider { border-color: var(--border); }
 }
 
 body:has(#view-app.hidden) .bottom-nav { display: none; }
+
+/* ===== BETA etapa 2 · Remedios ===== */
+.resumen-row { display: flex; gap: 10px; padding: 14px 14px 0; }
+.resumen-card { flex: 1; background: var(--surface); border-radius: 18px; padding: 14px; display: flex; align-items: center; gap: 12px; }
+.resumen-card.warn { background: var(--warn-soft); border: 1px solid var(--warn-line); }
+.resumen-big { font-size: 22px; font-weight: 800; }
+.resumen-card.warn .resumen-big { color: var(--warn-text); }
+.resumen-sub { font-size: 12px; color: var(--muted); }
+.group-status { margin-left: 10px; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+.group-status.done { background: var(--ok-soft); color: var(--ok); }
+.group-status.pending { background: var(--surface-2); color: var(--muted); }
+.stock-bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin-top: 10px; }
+.stock-bar-fill { height: 8px; background: var(--navy); border-radius: 4px; }
+.stock-bar-fill.low { background: var(--warn-text); }
+.stock-bar-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.check-btn { border-radius: 8px; }
