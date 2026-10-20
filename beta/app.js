@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'beta-5';
+const APP_VERSION = 'beta-6';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -1988,12 +1988,15 @@ function renderBalances() {
   const monthTotal = monthExp.reduce((sum, exp) => sum + Number(exp.amount), 0);
   const monthName = capitalize(new Date().toLocaleDateString('es-AR', { month: 'long' }));
   container.innerHTML = `
-    <div class="month-card">
-      <div class="month-label">Gasto compartido · ${escapeHtml(monthName)}</div>
+    <div class="month-card" id="month-card" role="button" tabindex="0" aria-label="Ver los gastos del mes">
+      <div class="month-label">Gasto compartido · ${escapeHtml(monthName)} <span class="month-more">Ver detalle ›</span></div>
       <div class="month-amount">${money(monthTotal)}</div>
       <div class="month-sub">${monthExp.length} ${monthExp.length === 1 ? 'gasto' : 'gastos'}${monthExp.length ? ' · promedio ' + money(monthTotal / monthExp.length) : ''}</div>
     </div>
     <h3 class="section-title">Balance de cada uno</h3><div class="balance-list"></div>`;
+  const monthCard = container.querySelector('#month-card');
+  monthCard.addEventListener('click', () => openMonthSheet(monthKey));
+  monthCard.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMonthSheet(monthKey); } });
   const list = container.querySelector('.balance-list');
   const maxAbs = Math.max(1, ...eligible.map(p => Math.abs(net[p.user_id] || 0)));
   eligible.forEach(p => {
@@ -2034,6 +2037,54 @@ function renderBalances() {
       container.appendChild(row);
     });
   }
+}
+
+// BETA: ventana desde abajo con los gastos compartidos de un mes
+function shiftMonthKey(key, delta) {
+  const [y, m] = key.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function openMonthSheet(key) {
+  let sheet = $('#modal-month');
+  if (!sheet) {
+    sheet = document.createElement('div');
+    sheet.id = 'modal-month';
+    sheet.className = 'modal hidden';
+    sheet.innerHTML = '<div class="modal-content month-sheet"></div>';
+    sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.classList.add('hidden'); });
+    document.body.appendChild(sheet);
+  }
+  const [y, m] = key.split('-').map(Number);
+  const label = capitalize(new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }));
+  const items = expensesCache
+    .filter(exp => exp.expense_type !== 'cuenta_externa' && String(exp.expense_date).startsWith(key))
+    .sort((p, q) => String(q.expense_date).localeCompare(String(p.expense_date)));
+  const total = items.reduce((sum, exp) => sum + Number(exp.amount), 0);
+  const rows = items.length === 0
+    ? '<p class="hint" style="text-align:center;padding:18px 0;">No hay gastos compartidos en este mes.</p>'
+    : items.map(exp => {
+        const cat = categoriesCache.find(c => c.id === exp.category_id);
+        return `<div class="month-item">
+          <div class="month-item-main"><div class="month-item-title">${escapeHtml(exp.description)}</div>
+          <div class="month-item-meta">${formatDate(exp.expense_date)} · Pagó ${escapeHtml(profileName(exp.paid_by))}${cat ? ' · ' + escapeHtml(cat.name) : ''}</div></div>
+          <div class="month-item-amount">${money(exp.amount)}</div></div>`;
+      }).join('');
+  const box = sheet.querySelector('.month-sheet');
+  box.innerHTML = `
+    <div class="month-sheet-nav">
+      <button type="button" class="btn-icon-small" id="month-prev" aria-label="Mes anterior">‹</button>
+      <div class="month-sheet-title">${escapeHtml(label)}</div>
+      <button type="button" class="btn-icon-small" id="month-next" aria-label="Mes siguiente">›</button>
+    </div>
+    <div class="month-sheet-total">${money(total)}<small>${items.length} ${items.length === 1 ? 'gasto' : 'gastos'}</small></div>
+    <div class="month-sheet-list">${rows}</div>
+    <button type="button" class="btn-secondary btn-block" id="month-close" style="margin-top:12px;">Cerrar</button>`;
+  box.querySelector('#month-prev').addEventListener('click', () => openMonthSheet(shiftMonthKey(key, -1)));
+  box.querySelector('#month-next').addEventListener('click', () => openMonthSheet(shiftMonthKey(key, 1)));
+  box.querySelector('#month-close').addEventListener('click', () => sheet.classList.add('hidden'));
+  sheet.classList.remove('hidden');
 }
 
 // BETA: abre "Registrar pago" ya completado con el ajuste sugerido
