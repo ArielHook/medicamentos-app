@@ -1228,7 +1228,8 @@ input::placeholder, textarea::placeholder { color: #7889A6; }
 .btn-menu-toggle { background: var(--surface); color: var(--text); }
 .tabs { background: #0D1422; top: 63px; }
 .tab.active { color: var(--navy); border-bottom-color: var(--navy); }
-.btn-danger, .menu-item-danger { color: var(--danger); }
+.menu-item-danger { color: var(--danger); }
+.btn-danger { background: var(--danger); color: var(--on-accent); font-weight: 700; }
 .modal-content, .auth-card { border: 1px solid var(--border); }
 .modal { background: rgba(3,6,12,0.7); }
 hr, .menu-divider { border-color: var(--border); }
