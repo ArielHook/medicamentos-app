@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'v40';
+const APP_VERSION = 'v41';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -3224,8 +3224,32 @@ function renderAdmin(profiles, perms) {
     card.innerHTML = `
       <span class="uname">${escapeHtml(p.display_name)}</span>${p.is_admin ? '<span class="admin-badge">ADMIN</span>' : ''}
       ${permsHtml}
+      ${p.user_id !== currentUser.id ? `<button type="button" class="btn-secondary btn-block" data-setpass="${p.user_id}" style="margin-top:10px;">🔑 Cambiar contraseña</button>` : ''}
     `;
     container.appendChild(card);
+  });
+
+  container.querySelectorAll('[data-setpass]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const uid = btn.dataset.setpass;
+      const pass = prompt(`Nueva contraseña para ${profileName(uid)} (mínimo 6 caracteres):`);
+      if (pass === null) return;
+      if (pass.length < 6) { alert('La contraseña debe tener al menos 6 caracteres.'); return; }
+      btn.disabled = true;
+      try {
+        const { data: s } = await sb.auth.getSession();
+        const resp = await fetch(`${window.SUPABASE_URL}/functions/v1/admin-set-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.session.access_token}`, apikey: window.SUPABASE_ANON_KEY },
+          body: JSON.stringify({ user_id: uid, password: pass }),
+        });
+        const out = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(out.error || 'Error');
+        logActivity('admin', 'update', `Contraseña cambiada a ${profileName(uid)}`, 'Cambio hecho por un administrador');
+        alert(`Listo. La nueva contraseña de ${profileName(uid)} ya está activa. Avisale por un canal privado.`);
+      } catch (e) { alert('No se pudo cambiar: ' + e.message); }
+      btn.disabled = false;
+    });
   });
 
   container.querySelectorAll('input[type=checkbox]').forEach(chk => {
