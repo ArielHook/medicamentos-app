@@ -29,8 +29,32 @@
         <button type="submit" class="btn-primary">Ingresar</button>
       </form>
       <p class="error" id="login-error"></p>
+      <button type="button" id="btn-forgot" class="btn-link">Olvidé mi contraseña</button>
     </div>
   </section>
+
+  <!-- RECUPERAR CONTRASEÑA -->
+  <div id="modal-forgot" class="modal hidden">
+    <div class="modal-content">
+      <h2>Recuperar contraseña</h2>
+      <div id="forgot-step1">
+        <p class="hint">Escribí tu usuario. Si tenés un correo de recuperación confirmado, te enviamos un código.</p>
+        <label>Usuario</label>
+        <input type="text" id="forgot-username" autocomplete="username" />
+        <button type="button" id="btn-forgot-send" class="btn-primary btn-block">Enviar código</button>
+      </div>
+      <div id="forgot-step2" class="hidden">
+        <p class="hint">Si el usuario tiene un correo confirmado, el código ya está en camino (revisá también Spam). Vence en 15 minutos.</p>
+        <label>Código de 6 dígitos</label>
+        <input type="text" id="forgot-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" />
+        <label>Nueva contraseña</label>
+        <input type="password" id="forgot-new-password" minlength="6" placeholder="Mínimo 6 caracteres" autocomplete="new-password" />
+        <button type="button" id="btn-forgot-reset" class="btn-primary btn-block">Cambiar contraseña</button>
+      </div>
+      <p class="error" id="forgot-error"></p>
+      <div class="modal-actions"><div class="spacer"></div><button type="button" id="btn-forgot-close" class="btn-secondary">Cerrar</button></div>
+    </div>
+  </div>
 
   <!-- APP PRINCIPAL -->
   <section id="view-app" class="view hidden">
@@ -582,6 +606,20 @@
       <button type="button" id="btn-save-displayname" class="btn-secondary">Guardar</button>
     </div>
     <p class="error" id="account-name-error"></p>
+
+    <h3 class="section-title">Correo de recuperación</h3>
+    <p class="hint" id="recovery-status">Cargando…</p>
+    <div id="recovery-edit">
+      <input type="email" id="recovery-email" placeholder="tu@correo.com" autocomplete="email" />
+      <button type="button" id="btn-recovery-save" class="btn-secondary btn-block" style="margin-top:8px;">Guardar y enviar código</button>
+    </div>
+    <div id="recovery-confirm" class="hidden">
+      <label>Código que te llegó al correo</label>
+      <input type="text" id="recovery-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" />
+      <button type="button" id="btn-recovery-confirm" class="btn-primary btn-block">Confirmar correo</button>
+    </div>
+    <button type="button" id="btn-recovery-remove" class="btn-secondary btn-block hidden" style="margin-top:8px;">Quitar correo</button>
+    <p class="error" id="recovery-error"></p>
 
     <h3 class="section-title">Cambiar contraseña</h3>
     <label>Nueva contraseña</label>
