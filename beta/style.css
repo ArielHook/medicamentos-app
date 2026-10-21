@@ -1408,3 +1408,6 @@ body:has(#view-app.hidden) .bottom-nav { display: none; }
 .btn-pay { height: 40px; padding: 0 16px; border-radius: 20px; font-size: 14px; }
 .pantry-actions, .fijo-actions { gap: 6px; }
 .category-row .label, .account-row .label { font-size: 15px; }
+
+.btn-link { background: none; border: 0; color: var(--navy); font-family: inherit; font-size: 14px; font-weight: 700; padding: 12px 0 0; width: 100%; cursor: pointer; text-decoration: underline; }
+input[type=email] { padding: 12px; border-radius: 10px; border: 1px solid var(--border); font-size: 16px; width: 100%; background: var(--surface); color: var(--text); }

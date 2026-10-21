@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'beta-11';
+const APP_VERSION = 'beta-12';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -264,6 +264,85 @@ $('#btn-change-password').addEventListener('click', async () => {
   $('#account-new-password').value = '';
   $('#account-confirm-password').value = '';
   alert('Contraseña actualizada.');
+});
+
+
+// ---------- RECUPERACIÓN DE CONTRASEÑA POR CORREO ----------
+async function recoveryCall(payload, withSession) {
+  const headers = { 'Content-Type': 'application/json', apikey: window.SUPABASE_ANON_KEY };
+  if (withSession) {
+    const { data } = await sb.auth.getSession();
+    headers.Authorization = `Bearer ${data.session.access_token}`;
+  } else {
+    headers.Authorization = `Bearer ${window.SUPABASE_ANON_KEY}`;
+  }
+  const resp = await fetch(`${window.SUPABASE_URL}/functions/v1/account-recovery`, { method: 'POST', headers, body: JSON.stringify(payload) });
+  const out = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(out.error || 'Error de conexión');
+  return out;
+}
+async function refreshRecoveryStatus() {
+  const st = $('#recovery-status');
+  $('#recovery-error').textContent = '';
+  $('#recovery-confirm').classList.add('hidden');
+  try {
+    const r = await recoveryCall({ action: 'status' }, true);
+    $('#btn-recovery-remove').classList.toggle('hidden', !r.email);
+    if (r.email && r.verified) { st.textContent = `✔ Confirmado: ${r.email}`; $('#recovery-email').value = r.email; }
+    else if (r.email) { st.textContent = `Pendiente de confirmar: ${r.email}`; $('#recovery-email').value = r.email; $('#recovery-confirm').classList.remove('hidden'); }
+    else { st.textContent = 'Sin correo. Agregá uno para poder recuperar tu contraseña si la olvidás.'; $('#recovery-email').value = ''; }
+  } catch (e) { st.textContent = 'No se pudo cargar el estado del correo.'; }
+}
+$('#menu-my-account').addEventListener('click', refreshRecoveryStatus);
+$('#btn-recovery-save').addEventListener('click', async () => {
+  const email = $('#recovery-email').value.trim();
+  const err = $('#recovery-error'); err.textContent = '';
+  if (!email) { err.textContent = 'Ingresá un correo.'; return; }
+  const btn = $('#btn-recovery-save'); btn.disabled = true;
+  try { await recoveryCall({ action: 'set_email', email }, true); await refreshRecoveryStatus(); }
+  catch (e) { err.textContent = e.message; }
+  btn.disabled = false;
+});
+$('#btn-recovery-confirm').addEventListener('click', async () => {
+  const err = $('#recovery-error'); err.textContent = '';
+  try { await recoveryCall({ action: 'confirm_email', code: $('#recovery-code').value }, true); $('#recovery-code').value = ''; await refreshRecoveryStatus(); }
+  catch (e) { err.textContent = e.message; }
+});
+$('#btn-recovery-remove').addEventListener('click', async () => {
+  if (!confirm('¿Quitar el correo de recuperación?')) return;
+  try { await recoveryCall({ action: 'remove_email' }, true); await refreshRecoveryStatus(); }
+  catch (e) { $('#recovery-error').textContent = e.message; }
+});
+
+$('#btn-forgot').addEventListener('click', () => {
+  $('#forgot-username').value = $('#login-username').value;
+  $('#forgot-error').textContent = '';
+  $('#forgot-step1').classList.remove('hidden');
+  $('#forgot-step2').classList.add('hidden');
+  $('#modal-forgot').classList.remove('hidden');
+});
+$('#btn-forgot-close').addEventListener('click', () => $('#modal-forgot').classList.add('hidden'));
+$('#btn-forgot-send').addEventListener('click', async () => {
+  const username = $('#forgot-username').value.trim();
+  const err = $('#forgot-error'); err.textContent = '';
+  if (!username) { err.textContent = 'Ingresá tu usuario.'; return; }
+  const btn = $('#btn-forgot-send'); btn.disabled = true;
+  try { await recoveryCall({ action: 'request_reset', username }, false); $('#forgot-step1').classList.add('hidden'); $('#forgot-step2').classList.remove('hidden'); }
+  catch (e) { err.textContent = e.message; }
+  btn.disabled = false;
+});
+$('#btn-forgot-reset').addEventListener('click', async () => {
+  const err = $('#forgot-error'); err.textContent = '';
+  const btn = $('#btn-forgot-reset'); btn.disabled = true;
+  try {
+    await recoveryCall({ action: 'reset_password', username: $('#forgot-username').value.trim(), code: $('#forgot-code').value, password: $('#forgot-new-password').value }, false);
+    $('#modal-forgot').classList.add('hidden');
+    $('#login-username').value = $('#forgot-username').value.trim();
+    $('#login-password').value = '';
+    $('#login-error').textContent = '';
+    alert('Contraseña cambiada. Ya podés ingresar con la nueva.');
+  } catch (e) { err.textContent = e.message; }
+  btn.disabled = false;
 });
 
 $('#btn-logout-everywhere').addEventListener('click', async () => {
