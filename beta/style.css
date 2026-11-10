@@ -1411,3 +1411,6 @@ body:has(#view-app.hidden) .bottom-nav { display: none; }
 
 .btn-link { background: none; border: 0; color: var(--navy); font-family: inherit; font-size: 14px; font-weight: 700; padding: 12px 0 0; width: 100%; cursor: pointer; text-decoration: underline; }
 input[type=email] { padding: 12px; border-radius: 10px; border: 1px solid var(--border); font-size: 16px; width: 100%; background: var(--surface); color: var(--text); }
+
+.settlement-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.settlement-main { flex: 1; min-width: 0; }

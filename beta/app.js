@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'beta-13';
+const APP_VERSION = 'beta-14';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -2214,13 +2214,27 @@ function renderSettlements() {
     container.innerHTML = '<p class="hint">Sin pagos registrados todavía.</p>';
     return;
   }
+  const writeOk = canWrite('gastos');
   settlementsCache.forEach(s => {
     const row = document.createElement('div');
-    row.className = 'history-row';
+    row.className = 'history-row settlement-row';
     row.innerHTML = `
-      <div><strong>${escapeHtml(profileName(s.from_user))}</strong> le pagó <strong>${money(s.amount)}</strong> a <strong>${escapeHtml(profileName(s.to_user))}</strong>${s.notes ? ' — ' + escapeHtml(s.notes) : ''}</div>
-      <div class="when">${formatDate(s.settled_date)}</div>
+      <div class="settlement-main">
+        <div><strong>${escapeHtml(profileName(s.from_user))}</strong> le pagó <strong>${money(s.amount)}</strong> a <strong>${escapeHtml(profileName(s.to_user))}</strong>${s.notes ? ' — ' + escapeHtml(s.notes) : ''}</div>
+        <div class="when">${formatDate(s.settled_date)}</div>
+      </div>
+      ${writeOk ? '<button type="button" class="btn-icon-xs danger" data-del-settlement title="Eliminar este pago">✕</button>' : ''}
     `;
+    if (writeOk) {
+      row.querySelector('[data-del-settlement]').addEventListener('click', async () => {
+        const desc = `${profileName(s.from_user)} → ${profileName(s.to_user)} por ${money(s.amount)} (${formatDate(s.settled_date)})`;
+        if (!confirm(`¿Eliminar este pago?\n\n${desc}\n\nLos balances se recalculan sin él.`)) return;
+        const { error } = await sb.from('settlements').delete().eq('id', s.id);
+        if (error) { alert('No se pudo eliminar: ' + error.message); return; }
+        logActivity('gastos', 'delete', `Eliminó un pago registrado: ${desc}`);
+        await loadGastos();
+      });
+    }
     container.appendChild(row);
   });
 }
