@@ -1,6 +1,6 @@
 // cache: 'no-store' evita que el navegador devuelva respuestas viejas
 // en celulares/Chrome Android para las consultas a Supabase.
-const APP_VERSION = 'v41';
+const APP_VERSION = 'v42';
 
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   global: {
@@ -896,6 +896,29 @@ function renderAlerts() {
   }
   banner.classList.remove('hidden');
   banner.textContent = `⚠️ Stock bajo: ${low.map(m => m.name).join(', ')}`;
+}
+
+
+// Montos: acepta "1500", "1500.50", "1500,50", "1.500", "1.500,50" y "1,500.50".
+function parseAmount(raw) {
+  let s = String(raw ?? '').trim().replace(/\s/g, '').replace(/[$]/g, '');
+  if (!s) return NaN;
+  const hasDot = s.includes('.'), hasComma = s.includes(',');
+  if (hasDot && hasComma) {
+    // el último separador es el decimal; el otro es de miles
+    const dec = s.lastIndexOf('.') > s.lastIndexOf(',') ? '.' : ',';
+    const thou = dec === '.' ? ',' : '.';
+    s = s.split(thou).join('').replace(dec, '.');
+  } else if (hasComma) {
+    s = s.replace(',', '.');                    // coma = decimal (es-AR)
+  } else if (hasDot) {
+    // "1.500" o "12.345.678" = miles; "12.5" o "0.125" = decimal
+    if (/^[1-9]\d{0,2}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+  }
+  return /^\d+(\.\d+)?$/.test(s) ? Number(s) : NaN;
+}
+function amountToInput(n) {
+  return String(Math.round(Number(n) * 100) / 100).replace('.', ',');
 }
 
 function formatDate(d) {
@@ -2174,7 +2197,7 @@ function payDebt(d) {
     populateSettlementToOptions();
   }
   $('#settlement-to').value = d.to;
-  $('#settlement-amount').value = Math.round(d.amount * 100) / 100;
+  $('#settlement-amount').value = amountToInput(d.amount);
 }
 
 function renderExternalBalances() {
@@ -2214,13 +2237,27 @@ function renderSettlements() {
     container.innerHTML = '<p class="hint">Sin pagos registrados todavía.</p>';
     return;
   }
+  const writeOk = !!myProfile?.is_admin;
   settlementsCache.forEach(s => {
     const row = document.createElement('div');
-    row.className = 'history-row';
+    row.className = 'history-row settlement-row';
     row.innerHTML = `
-      <div><strong>${escapeHtml(profileName(s.from_user))}</strong> le pagó <strong>${money(s.amount)}</strong> a <strong>${escapeHtml(profileName(s.to_user))}</strong>${s.notes ? ' — ' + escapeHtml(s.notes) : ''}</div>
-      <div class="when">${formatDate(s.settled_date)}</div>
+      <div class="settlement-main">
+        <div><strong>${escapeHtml(profileName(s.from_user))}</strong> le pagó <strong>${money(s.amount)}</strong> a <strong>${escapeHtml(profileName(s.to_user))}</strong>${s.notes ? ' — ' + escapeHtml(s.notes) : ''}</div>
+        <div class="when">${formatDate(s.settled_date)}</div>
+      </div>
+      ${writeOk ? '<button type="button" class="btn-icon-xs danger" data-del-settlement title="Eliminar este pago">✕</button>' : ''}
     `;
+    if (writeOk) {
+      row.querySelector('[data-del-settlement]').addEventListener('click', async () => {
+        const desc = `${profileName(s.from_user)} → ${profileName(s.to_user)} por ${money(s.amount)} (${formatDate(s.settled_date)})`;
+        if (!confirm(`¿Eliminar este pago?\n\n${desc}\n\nLos balances se recalculan sin él.`)) return;
+        const { error } = await sb.from('settlements').delete().eq('id', s.id);
+        if (error) { alert('No se pudo eliminar: ' + error.message); return; }
+        logActivity('gastos', 'delete', `Eliminó un pago registrado: ${desc}`);
+        await loadGastos();
+      });
+    }
     container.appendChild(row);
   });
 }
@@ -2537,7 +2574,7 @@ function renderTemplates() {
       if (load) load.addEventListener('click', () => {
         openExpenseModal(null);
         applyTemplateToExpenseForm(t);
-        if (suggested) $('#expense-amount').value = suggested;
+        if (suggested) $('#expense-amount').value = amountToInput(suggested);
       });
       row.querySelector('[data-edit-tpl]').addEventListener('click', () => openTemplateModal(t.id));
       row.querySelector('[data-del-tpl]').addEventListener('click', async () => {
@@ -2573,7 +2610,7 @@ function openBatchFixedModal() {
     return `<div class="batch-row" data-tid="${t.id}">
       <label class="batch-check"><input type="checkbox" checked /> <span>${escapeHtml(t.name)}</span></label>
       <div class="batch-fields">
-        <input type="number" class="batch-amount" min="0" step="0.01" value="${sug || ''}" placeholder="Monto" aria-label="Monto de ${escapeHtml(t.name)}" />
+        <input type="text" inputmode="decimal" class="batch-amount" value="${sug ? amountToInput(sug) : ''}" placeholder="Monto" aria-label="Monto de ${escapeHtml(t.name)}" />
         <input type="date" class="batch-date" value="${dateVal}" aria-label="Fecha de ${escapeHtml(t.name)}" />
       </div>
       <div class="batch-meta">${kind}${sug ? '' : ' · completá el monto'}</div>
@@ -2594,7 +2631,7 @@ function openBatchFixedModal() {
     </div>`;
   const refresh = () => {
     const sel = [...box.querySelectorAll('.batch-row')].filter(r => r.querySelector('input[type=checkbox]').checked);
-    const total = sel.reduce((sum, r) => sum + (Number(r.querySelector('.batch-amount').value) || 0), 0);
+    const total = sel.reduce((sum, r) => sum + (parseAmount(r.querySelector('.batch-amount').value) || 0), 0);
     $('#batch-total').textContent = `${sel.length} ${sel.length === 1 ? 'gasto' : 'gastos'} · ${money(total)}`;
     $('#batch-confirm').textContent = sel.length ? `Cargar ${sel.length}` : 'Cargar';
   };
@@ -2611,7 +2648,7 @@ async function submitBatchFixed(pending, modal) {
   for (const row of modal.querySelectorAll('.batch-row')) {
     if (!row.querySelector('input[type=checkbox]').checked) continue;
     const t = pending.find(x => x.id === row.dataset.tid);
-    const amount = Number(row.querySelector('.batch-amount').value);
+    const amount = parseAmount(row.querySelector('.batch-amount').value);
     const date = row.querySelector('.batch-date').value;
     if (!(amount > 0)) { alert(`Falta el monto de "${t.name}".`); return; }
     if (!date) { alert(`Falta la fecha de "${t.name}".`); return; }
@@ -2703,7 +2740,7 @@ function openTemplateModal(templateId) {
     $('#modal-template-title').textContent = 'Editar gasto fijo';
     $('#template-id').value = t.id;
     $('#template-name').value = t.name;
-    $('#template-amount').value = t.default_amount || '';
+    $('#template-amount').value = t.default_amount ? amountToInput(t.default_amount) : '';
     $('#template-due-day').value = t.due_day || '';
     $('#template-period').value = String(t.period_months || 1);
     $('#template-category').value = t.category_id || '';
@@ -2720,7 +2757,9 @@ $('#form-template').addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = $('#template-id').value || null;
   const name = $('#template-name').value.trim();
-  const amount = $('#template-amount').value ? Number($('#template-amount').value) : null;
+  const amountRaw = $('#template-amount').value.trim();
+  const amount = amountRaw ? parseAmount(amountRaw) : null;
+  if (amountRaw && Number.isNaN(amount)) { alert('El monto no es válido.'); return; }
   const categoryId = $('#template-category').value || null;
   const expenseType = $('#template-type-toggle .segmented-btn.active')?.dataset.type || 'compartido';
   if (!name) return;
@@ -2777,7 +2816,7 @@ function currentExpenseType() {
 
 function applyTemplateToExpenseForm(t) {
   $('#expense-description').value = t.name;
-  if (t.default_amount) $('#expense-amount').value = t.default_amount;
+  if (t.default_amount) $('#expense-amount').value = amountToInput(t.default_amount);
   $('#expense-category').value = t.category_id || '';
   $('#expense-is-fixed').value = '1';
   $('#expense-template-id').value = t.id;
@@ -2875,7 +2914,7 @@ function openExpenseModal(expenseId) {
     $('#modal-expense-title').textContent = 'Editar gasto';
     $('#expense-id').value = exp.id;
     $('#expense-description').value = exp.description;
-    $('#expense-amount').value = exp.amount;
+    $('#expense-amount').value = amountToInput(exp.amount);
     $('#expense-date').value = exp.expense_date;
     $('#expense-category').value = exp.category_id || '';
     $('#expense-notes').value = exp.notes || '';
@@ -2907,7 +2946,7 @@ $('#form-expense').addEventListener('submit', async (e) => {
   e.preventDefault();
   const expenseId = $('#expense-id').value || null;
   const description = $('#expense-description').value.trim();
-  const amount = Number($('#expense-amount').value);
+  const amount = parseAmount($('#expense-amount').value);
   const expenseDate = $('#expense-date').value;
   const categoryId = $('#expense-category').value || null;
   const notes = $('#expense-notes').value.trim() || null;
@@ -3027,8 +3066,7 @@ $('#form-settlement').addEventListener('submit', async (e) => {
     const fromUser = myProfile?.is_admin ? $('#settlement-from-select').value : currentUser.id;
     const toUser = $('#settlement-to').value;
     // Admite "150000", "150.000" o "150,000" (separador de miles) además de decimales.
-    const rawAmount = $('#settlement-amount').value.toString().trim();
-    const amount = Number(rawAmount.replace(/\./g, '').replace(',', '.'));
+    const amount = parseAmount($('#settlement-amount').value);
     const settledDate = $('#settlement-date').value;
     const notes = $('#settlement-notes').value.trim() || null;
 
